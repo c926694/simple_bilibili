@@ -1,6 +1,8 @@
 # 环境变量使用 BILIBILI_ 前缀，分组与字段名之间使用下划线。
 # 例如 BILIBILI_APP_HTTP_ADDR 和 BILIBILI_JWT_SECRET。
 app:
+  node_id: 0                 # Snowflake 节点编号，多实例使用各自的编号
+  trusted_proxies: []        # 允许声明客户端地址的代理 IP 或 CIDR
   mode: debug                 # Gin 运行模式，可选 debug、release、test
   http_addr: "127.0.0.1:8080" # HTTP 监听地址
   shutdown_timeout: 10s       # 进程退出时等待连接关闭的时限

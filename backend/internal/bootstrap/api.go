@@ -10,13 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"simple_bilibili/backend/internal/middleware"
+	"simple_bilibili/backend/internal/modules/user"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/response"
 )
 
 func (a *App) RunAPI(ctx context.Context) error {
 	gin.SetMode(a.config.Mode)
-	router := newRouter()
+	router, err := a.router()
+	if err != nil {
+		return err
+	}
 
 	listener, err := net.Listen("tcp", a.config.HTTPAddr)
 	if err != nil {
@@ -44,6 +49,19 @@ func (a *App) RunAPI(ctx context.Context) error {
 		}
 		return httpServeError(<-served)
 	}
+}
+
+func (a *App) router() (*gin.Engine, error) {
+	router := newRouter()
+	if err := router.SetTrustedProxies(a.config.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("配置可信代理: %w", err)
+	}
+	user.RegisterRoutes(router.Group("/api/v1"), user.NewHandler(a.Modules.User, a.logger),
+		middleware.Authenticate(a.tokens, a.Modules.User.AccessRevoked, a.logger),
+		middleware.RateLimit(a.redis, a.logger, "register", 5, time.Minute),
+		middleware.RateLimit(a.redis, a.logger, "login", 20, time.Minute),
+	)
+	return router, nil
 }
 
 func newRouter() *gin.Engine {

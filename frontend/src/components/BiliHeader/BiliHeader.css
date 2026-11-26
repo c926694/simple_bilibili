@@ -1,0 +1,455 @@
+.bili-header-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.bili-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--bili-header-height);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  gap: 16px;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease;
+}
+
+.bili-topbar--transparent {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 100%);
+  color: #ffffff;
+}
+
+.bili-topbar--solid {
+  background: #ffffff;
+  color: var(--bili-text-1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.bili-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
+}
+
+.bili-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+
+.bili-topbar--transparent .bili-brand {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.bili-topbar--solid .bili-brand {
+  color: var(--bili-blue);
+}
+
+.bili-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  list-style: none;
+}
+
+.bili-nav-link {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: transform 0.15s ease, color 0.15s ease;
+  display: inline-block;
+}
+
+.bili-topbar--transparent .bili-nav-link {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.bili-nav-link:hover {
+  transform: translateY(-2px);
+}
+
+.bili-topbar--solid .bili-nav-link:hover {
+  color: var(--bili-blue);
+}
+
+.bili-search {
+  flex: 1;
+  max-width: 500px;
+  min-width: 180px;
+  height: 40px;
+  border-radius: 8px;
+  padding: 0 6px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(241, 242, 243, 0.92);
+  color: var(--bili-text-1);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bili-topbar--solid .bili-search {
+  border-color: var(--bili-border);
+  background: var(--bili-bg-input);
+}
+
+.bili-search:focus-within,
+.bili-search:hover {
+  background: #ffffff;
+  border-color: #c9ccd0;
+}
+
+.bili-search__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--bili-text-1);
+}
+
+.bili-search__input::placeholder {
+  color: var(--bili-text-2);
+}
+
+.bili-search__btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bili-text-1);
+  transition: background-color 0.15s ease;
+}
+
+.bili-search__btn:hover {
+  background: var(--bili-bg-input);
+}
+
+.bili-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.bili-user-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.bili-login-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bili-blue);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 174, 236, 0.32);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.bili-login-circle:hover {
+  background: var(--bili-blue-hover);
+  transform: scale(1.04);
+}
+
+.bili-avatar-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 2px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  transition: transform 0.2s ease;
+}
+
+.bili-topbar--solid .bili-avatar-trigger {
+  border-color: var(--bili-border);
+}
+
+.bili-user-entry:hover .bili-avatar-trigger {
+  transform: scale(1.08);
+}
+
+.bili-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  background: #ffffff;
+  color: var(--bili-text-1);
+  border-radius: 10px;
+  box-shadow: var(--bili-shadow-md);
+  border: 1px solid var(--bili-border-light);
+  padding: 20px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+  z-index: 150;
+}
+
+.bili-popover::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+}
+
+.bili-user-entry:hover .bili-popover,
+.bili-user-entry:focus-within .bili-popover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.bili-guest-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--bili-text-1);
+}
+
+.bili-guest-card__perks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--bili-text-2);
+}
+
+.bili-guest-card__perk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bili-guest-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bili-blue);
+  flex-shrink: 0;
+}
+
+.bili-guest-card__btn {
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--bili-blue);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.bili-guest-card__btn:hover {
+  background: var(--bili-blue-hover);
+}
+
+.bili-guest-card__footer {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--bili-text-2);
+}
+
+.bili-guest-card__link {
+  color: var(--bili-blue);
+  font-weight: 500;
+}
+
+.bili-guest-card__link:hover {
+  text-decoration: underline;
+}
+
+.bili-profile-card__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.bili-profile-card__name {
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.bili-profile-card__meta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--bili-text-3);
+}
+
+.bili-profile-card__coin {
+  color: var(--bili-blue);
+  font-weight: 600;
+}
+
+.bili-profile-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 12px 0;
+  border-top: 1px solid var(--bili-border-light);
+  border-bottom: 1px solid var(--bili-border-light);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.bili-profile-card__stat-num {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.bili-profile-card__stat-label {
+  font-size: 12px;
+  color: var(--bili-text-3);
+}
+
+.bili-profile-card__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bili-profile-card__item {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--bili-text-2);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.bili-profile-card__item:hover {
+  background: var(--bili-bg-soft);
+  color: var(--bili-text-1);
+}
+
+.bili-profile-card__logout {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bili-border-light);
+}
+
+.bili-icon-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.bili-topbar--transparent .bili-icon-entry {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.bili-icon-entry:hover {
+  transform: translateY(-2px);
+}
+
+.bili-topbar--solid .bili-icon-entry:hover {
+  color: var(--bili-blue);
+}
+
+.bili-upload-btn {
+  height: 34px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.bili-upload-btn:hover {
+  background: var(--bili-pink-hover);
+}
+
+.bili-banner {
+  position: relative;
+  width: 100%;
+  height: 155px;
+  overflow: hidden;
+  background: linear-gradient(115deg, #2b86e5 0%, #56b4f5 42%, #9ad9ff 74%, #ffc8dc 100%);
+}
+
+.bili-banner__decor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.bili-banner__inner {
+  position: relative;
+  max-width: var(--bili-max-width);
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 60px;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 18px;
+}
+
+.bili-banner__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 10px rgba(0, 74, 138, 0.26);
+}
+
+.bili-header-spacer {
+  height: var(--bili-header-height);
+}
+
+@media (max-width: 1080px) {
+  .bili-nav-links,
+  .bili-icon-entry--secondary {
+    display: none;
+  }
+}

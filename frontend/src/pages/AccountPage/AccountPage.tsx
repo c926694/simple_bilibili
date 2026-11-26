@@ -1,0 +1,395 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
+import { ApiError } from '../../api/client'
+import { userApi } from '../../api/user'
+import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
+import { PRESET_AVATARS, UserAvatar } from '../../components/UserAvatar/UserAvatar'
+import { useAuth } from '../../context/AuthContext'
+import './AccountPage.css'
+
+type AccountTab = 'profile' | 'security'
+
+export function AccountPage() {
+  const { user, initializing, openAuthModal, setUser, logout } = useAuth()
+  const [activeTab, setActiveTab] = useState<AccountTab>('profile')
+
+  const [nickname, setNickname] = useState('')
+  const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileNotice, setProfileNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(
+    null,
+  )
+
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordNotice, setPasswordNotice] = useState<{
+    type: 'success' | 'error'
+    text: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+    setNickname(user.nickname)
+    setBio(user.bio)
+    setAvatarUrl(user.avatar_url)
+    setEmail(user.email ?? '')
+    setPhone(user.phone ?? '')
+  }, [user])
+
+  const handleProfileSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    setProfileNotice(null)
+
+    const trimmedNickname = nickname.trim()
+    if (!trimmedNickname || trimmedNickname.length > 32) {
+      setProfileNotice({ type: 'error', text: '昵称长度需在 1~32 个字符之间' })
+      return
+    }
+    if (bio.trim().length > 200) {
+      setProfileNotice({ type: 'error', text: '个人签名不能超过 200 个字符' })
+      return
+    }
+
+    setSavingProfile(true)
+    try {
+      const updated = await userApi.updateMe({
+        nickname: trimmedNickname,
+        bio: bio.trim(),
+        avatar_url: avatarUrl.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+      })
+      setUser(updated)
+      setProfileNotice({ type: 'success', text: '个人资料保存成功' })
+    } catch (err) {
+      setProfileNotice({
+        type: 'error',
+        text: err instanceof ApiError ? err.message : '保存失败，请稍后重试',
+      })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const handlePasswordSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    setPasswordNotice(null)
+
+    if (!oldPassword) {
+      setPasswordNotice({ type: 'error', text: '请输入当前密码' })
+      return
+    }
+    if (newPassword.length < 6 || newPassword.length > 64) {
+      setPasswordNotice({ type: 'error', text: '新密码长度需在 6~64 位之间' })
+      return
+    }
+    if (newPassword === oldPassword) {
+      setPasswordNotice({ type: 'error', text: '新密码不能与原密码相同' })
+      return
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordNotice({ type: 'error', text: '两次输入的新密码不一致' })
+      return
+    }
+
+    setSavingPassword(true)
+    try {
+      await userApi.updatePassword({
+        old_password: oldPassword,
+        new_password: newPassword,
+      })
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmNewPassword('')
+      await logout()
+      openAuthModal('login')
+    } catch (err) {
+      setPasswordNotice({
+        type: 'error',
+        text: err instanceof ApiError ? err.message : '密码修改失败，请稍后重试',
+      })
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  return (
+    <div className="account-page">
+      <BiliHeader />
+
+      {initializing ? (
+        <div className="account-guest">
+          <p>正在加载账号信息...</p>
+        </div>
+      ) : !user ? (
+        <div className="account-guest">
+          <h2>请先登录账号</h2>
+          <p>登录后可在个人中心管理昵称、头像、绑定信息与账号密码。</p>
+          <button
+            type="button"
+            className="account-submit-btn"
+            onClick={() => openAuthModal('login')}
+          >
+            立即登录
+          </button>
+        </div>
+      ) : (
+        <div className="account-layout">
+          <aside className="account-sidebar">
+            <div className="account-sidebar__title">个人中心</div>
+            <nav className="account-nav" aria-label="个人中心菜单">
+              <button
+                type="button"
+                className={`account-nav__item ${
+                  activeTab === 'profile' ? 'account-nav__item--active' : ''
+                }`}
+                onClick={() => setActiveTab('profile')}
+              >
+                我的信息
+              </button>
+              <button
+                type="button"
+                className={`account-nav__item ${
+                  activeTab === 'security' ? 'account-nav__item--active' : ''
+                }`}
+                onClick={() => setActiveTab('security')}
+              >
+                账号安全
+              </button>
+              <Link to={`/space/${user.id}`} className="account-nav__item">
+                查看个人空间 ↗
+              </Link>
+            </nav>
+          </aside>
+
+          <section className="account-main">
+            <div className="account-main__head">
+              <span className="account-main__bar" />
+              <h1 className="account-main__title">
+                {activeTab === 'profile' ? '我的信息' : '账号安全 · 修改密码'}
+              </h1>
+            </div>
+
+            {activeTab === 'profile' ? (
+              <>
+                <div className="account-summary">
+                  <UserAvatar src={avatarUrl} nickname={nickname || user.nickname} size={64} />
+                  <div className="account-summary__info">
+                    <div className="account-summary__name">{user.nickname}</div>
+                    <div className="account-summary__meta">
+                      <span>UID：{user.id}</span>
+                      <span>用户名：{user.username}</span>
+                      <span>代币余额：{user.coin_balance}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <form className="account-form" onSubmit={handleProfileSubmit} noValidate>
+                  <div className="account-field">
+                    <label className="account-field__label" htmlFor="profile-nickname">
+                      昵称
+                    </label>
+                    <div className="account-field__control">
+                      <input
+                        id="profile-nickname"
+                        type="text"
+                        className="account-input"
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        maxLength={32}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="account-field">
+                    <label className="account-field__label" htmlFor="profile-avatar">
+                      头像
+                    </label>
+                    <div className="account-field__control">
+                      <div className="avatar-presets" aria-label="预设头像">
+                        {PRESET_AVATARS.map((item) => (
+                          <button
+                            key={item.url}
+                            type="button"
+                            title={item.label}
+                            className={`avatar-preset-btn ${
+                              avatarUrl === item.url ? 'avatar-preset-btn--selected' : ''
+                            }`}
+                            onClick={() => setAvatarUrl(item.url)}
+                          >
+                            <UserAvatar src={item.url} nickname={item.label} size={42} />
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        id="profile-avatar"
+                        type="text"
+                        className="account-input"
+                        placeholder="输入头像 URL（支持 /avatars/... 或 http(s)://...）"
+                        value={avatarUrl}
+                        onChange={(e) => setAvatarUrl(e.target.value)}
+                        maxLength={512}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="account-field">
+                    <label className="account-field__label" htmlFor="profile-bio">
+                      我的签名
+                    </label>
+                    <div className="account-field__control">
+                      <textarea
+                        id="profile-bio"
+                        className="account-textarea"
+                        placeholder="设置您的签名，展示个人风格"
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        maxLength={200}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="account-field">
+                    <label className="account-field__label" htmlFor="profile-email">
+                      绑定邮箱
+                    </label>
+                    <div className="account-field__control">
+                      <input
+                        id="profile-email"
+                        type="email"
+                        className="account-input"
+                        placeholder="留空则不绑定邮箱"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="account-field">
+                    <label className="account-field__label" htmlFor="profile-phone">
+                      绑定手机号
+                    </label>
+                    <div className="account-field__control">
+                      <input
+                        id="profile-phone"
+                        type="tel"
+                        className="account-input"
+                        placeholder="留空则不绑定手机号"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {profileNotice && (
+                    <div
+                      className={`account-feedback ${
+                        profileNotice.type === 'success'
+                          ? 'account-feedback--success'
+                          : 'account-feedback--error'
+                      }`}
+                      role="status"
+                    >
+                      {profileNotice.text}
+                    </div>
+                  )}
+
+                  <div className="account-submit-row">
+                    <button
+                      type="submit"
+                      className="account-submit-btn"
+                      disabled={savingProfile}
+                    >
+                      {savingProfile ? '保存中...' : '保存'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <form className="account-form" onSubmit={handlePasswordSubmit} noValidate>
+                <div className="account-field">
+                  <label className="account-field__label" htmlFor="old-password">
+                    原密码
+                  </label>
+                  <div className="account-field__control">
+                    <input
+                      id="old-password"
+                      type="password"
+                      className="account-input"
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      autoComplete="current-password"
+                    />
+                  </div>
+                </div>
+
+                <div className="account-field">
+                  <label className="account-field__label" htmlFor="new-password">
+                    新密码
+                  </label>
+                  <div className="account-field__control">
+                    <input
+                      id="new-password"
+                      type="password"
+                      className="account-input"
+                      placeholder="6~64 位字符"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                <div className="account-field">
+                  <label className="account-field__label" htmlFor="confirm-new-password">
+                    确认新密码
+                  </label>
+                  <div className="account-field__control">
+                    <input
+                      id="confirm-new-password"
+                      type="password"
+                      className="account-input"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                {passwordNotice && (
+                  <div
+                    className={`account-feedback ${
+                      passwordNotice.type === 'success'
+                        ? 'account-feedback--success'
+                        : 'account-feedback--error'
+                    }`}
+                    role="alert"
+                  >
+                    {passwordNotice.text}
+                  </div>
+                )}
+
+                <div className="account-submit-row">
+                  <button
+                    type="submit"
+                    className="account-submit-btn"
+                    disabled={savingPassword}
+                  >
+                    {savingPassword ? '提交中...' : '确认修改密码'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}

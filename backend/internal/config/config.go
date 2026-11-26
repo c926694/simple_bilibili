@@ -22,6 +22,8 @@ type Config struct {
 }
 
 type App struct {
+	NodeID          int64         `mapstructure:"node_id" validate:"gte=0,lte=1023"`
+	TrustedProxies  []string      `mapstructure:"trusted_proxies" validate:"dive,ip|cidr"`
 	Mode            string        `mapstructure:"mode" validate:"oneof=debug release test"`
 	HTTPAddr        string        `mapstructure:"http_addr" validate:"listenaddr"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout" validate:"gt=0"`
@@ -57,7 +59,7 @@ type RocketMQ struct {
 type JWT struct {
 	Issuer     string        `mapstructure:"issuer" validate:"required"`
 	Secret     string        `mapstructure:"secret" validate:"min=32"`
-	AccessTTL  time.Duration `mapstructure:"access_ttl" validate:"gt=0"`
+	AccessTTL  time.Duration `mapstructure:"access_ttl" validate:"gte=1000000000"`
 	RefreshTTL time.Duration `mapstructure:"refresh_ttl" validate:"gtfield=AccessTTL"`
 }
 

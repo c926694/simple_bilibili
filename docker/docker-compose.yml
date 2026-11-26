@@ -151,6 +151,7 @@ services:
     environment:
       BILIBILI_APP_MODE: ${APP_MODE:-release}
       BILIBILI_APP_HTTP_ADDR: 0.0.0.0:8080
+      BILIBILI_APP_TRUSTED_PROXIES: ${APP_TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
       BILIBILI_MYSQL_ADDR: mysql:3306
       BILIBILI_MYSQL_USER: ${MYSQL_USER:-simple_bilibili}
       BILIBILI_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_mysql_password}

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 
 	"simple_bilibili/backend/internal/modules/comment"
 	"simple_bilibili/backend/internal/modules/danmaku"
@@ -11,6 +12,8 @@ import (
 	"simple_bilibili/backend/internal/modules/upload"
 	"simple_bilibili/backend/internal/modules/user"
 	"simple_bilibili/backend/internal/modules/video"
+	"simple_bilibili/backend/internal/pkg/jwt"
+	"simple_bilibili/backend/internal/pkg/snowflake"
 )
 
 type Modules struct {
@@ -24,8 +27,8 @@ type Modules struct {
 	Recommend   *recommend.Service
 }
 
-func NewModules(db *sqlx.DB) Modules {
-	users := user.NewService(user.NewStore(db))
+func NewModules(db *sqlx.DB, client *redis.Client, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
+	users := user.NewService(user.NewStore(db, client), tokens, ids)
 	videos := video.NewService(video.NewStore(db), users)
 
 	return Modules{
