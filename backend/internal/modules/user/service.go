@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -133,6 +134,18 @@ func (s *Service) Me(ctx context.Context, userID int64) (profileResponse, error)
 func (s *Service) UpdateProfile(ctx context.Context, userID int64, input profileInput) (profileResponse, error) {
 	var result profileResponse
 	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
+		if strings.HasPrefix(input.AvatarURL, "/storage/avatars/") {
+			current, err := s.Me(ctx, userID)
+			if err != nil {
+				return err
+			}
+			// 只核验本次更换的直传头像。
+			if current.AvatarURL != input.AvatarURL {
+				if err := s.verifyAvatar(ctx, userID, input.AvatarURL); err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.store.updateProfile(ctx, userID, input); err != nil {
 			return err
 		}
@@ -141,36 +154,6 @@ func (s *Service) UpdateProfile(ctx context.Context, userID int64, input profile
 		return err
 	})
 	if err != nil {
-		return profileResponse{}, err
-	}
-	return result, nil
-}
-
-func (s *Service) UploadAvatar(ctx context.Context, userID int64, input avatarInput) (profileResponse, error) {
-	objectKey := fmt.Sprintf("avatars/%d/%d.%s", userID, s.ids.Next(), input.extension)
-	if err := s.objects.PutObject(ctx, objectKey, input.file, input.size, input.contentType); err != nil {
-		return profileResponse{}, err
-	}
-
-	var result profileResponse
-	readyToCommit := false
-	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
-		// 仅更新头像地址，在同一事务读取完整资料。
-		if err := s.store.updateAvatar(ctx, userID, "/storage/"+objectKey); err != nil {
-			return err
-		}
-		var err error
-		result, err = s.Me(ctx, userID)
-		readyToCommit = err == nil
-		return err
-	})
-	if err != nil {
-		// 提交结果不明时保留对象，避免删除已写入资料的头像。
-		if !readyToCommit {
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			err = errors.Join(err, s.objects.RemoveObject(cleanupCtx, objectKey))
-		}
 		return profileResponse{}, err
 	}
 	return result, nil

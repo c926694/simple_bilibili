@@ -12,7 +12,6 @@ func RegisterRoutes(router *gin.RouterGroup, h *Handler, auth, registerLimit, lo
 	users := router.Group("/users")
 	users.GET("/me", auth, h.me)
 	users.PUT("/me", auth, h.updateProfile)
-	users.POST("/me/avatar", auth, h.uploadAvatar)
 	users.PUT("/me/password", auth, h.changePassword)
 	users.GET("/:id", h.publicProfile)
 }

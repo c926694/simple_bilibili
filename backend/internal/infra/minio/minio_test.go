@@ -49,7 +49,7 @@ func TestMinIOIntegration(t *testing.T) {
 	const contents = "验证对象内容"
 	base := "http://" + cfg.Endpoint + "/" + cfg.Bucket + "/"
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	for _, prefix := range []string{"avatars", "covers", "hls", "raw"} {
+	for _, prefix := range []string{"avatars", "covers", "dynamics", "hls", "raw"} {
 		key := prefix + "/test.txt"
 		if err := client.PutObject(t.Context(), key, strings.NewReader(contents), int64(len(contents)), "text/plain"); err != nil {
 			t.Fatal(err)

@@ -26,6 +26,9 @@ func TestLoadExample(t *testing.T) {
 	if cfg.MinIO.Bucket != "bilibili" || cfg.MinIO.Secure {
 		t.Errorf("MinIO 存储桶和 HTTPS 开关: %q/%t", cfg.MinIO.Bucket, cfg.MinIO.Secure)
 	}
+	if cfg.MinIO.PublicEndpoint != "127.0.0.1:8088" || cfg.MinIO.PublicSecure {
+		t.Errorf("MinIO 浏览器地址和 HTTPS 开关: %q/%t", cfg.MinIO.PublicEndpoint, cfg.MinIO.PublicSecure)
+	}
 	if len(cfg.RocketMQ.NameServers) != 1 || cfg.RocketMQ.NameServers[0] != "127.0.0.1:9876" {
 		t.Errorf("RocketMQ NameServer 地址: %v", cfg.RocketMQ.NameServers)
 	}
@@ -42,6 +45,8 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	t.Setenv("BILIBILI_MYSQL_PASSWORD", "")
 	t.Setenv("BILIBILI_REDIS_DB", "2")
 	t.Setenv("BILIBILI_MINIO_SECURE", "true")
+	t.Setenv("BILIBILI_MINIO_PUBLIC_ENDPOINT", "uploads.example.test:443")
+	t.Setenv("BILIBILI_MINIO_PUBLIC_SECURE", "true")
 	t.Setenv("BILIBILI_ROCKETMQ_NAME_SERVERS", "mq1:9876,mq2:9876")
 	t.Setenv("BILIBILI_JWT_ACCESS_TTL", "30m")
 	t.Setenv("BILIBILI_FFMPEG_BINARY", "/usr/local/bin/ffmpeg")
@@ -52,6 +57,9 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.App.HTTPAddr != ":9001" || cfg.MySQL.Password != "" || cfg.Redis.DB != 2 || !cfg.MinIO.Secure {
 		t.Error("app、mysql、redis 或 minio 环境变量覆盖失败")
+	}
+	if cfg.MinIO.PublicEndpoint != "uploads.example.test:443" || !cfg.MinIO.PublicSecure {
+		t.Error("MinIO 浏览器地址或 HTTPS 开关覆盖失败")
 	}
 	if len(cfg.RocketMQ.NameServers) != 2 || cfg.RocketMQ.NameServers[0] != "mq1:9876" || cfg.RocketMQ.NameServers[1] != "mq2:9876" {
 		t.Errorf("RocketMQ NameServer 地址: %v", cfg.RocketMQ.NameServers)
@@ -69,5 +77,18 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 
 	if _, err := Load(examplePath); err == nil {
 		t.Fatal("加载零时长的停机配置时应返回错误")
+	}
+}
+
+func TestLoadMinIOPublicEndpointDefault(t *testing.T) {
+	t.Setenv("BILIBILI_MINIO_ENDPOINT", "minio.example.test:9000")
+	t.Setenv("BILIBILI_MINIO_PUBLIC_ENDPOINT", "")
+
+	cfg, err := Load(examplePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MinIO.PublicEndpoint != cfg.MinIO.Endpoint {
+		t.Fatalf("MinIO 浏览器地址为 %q，期望 %q", cfg.MinIO.PublicEndpoint, cfg.MinIO.Endpoint)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"simple_bilibili/backend/internal/infra/minio"
+	"simple_bilibili/backend/internal/infra/rocketmq"
 	"simple_bilibili/backend/internal/modules/comment"
 	"simple_bilibili/backend/internal/modules/danmaku"
 	"simple_bilibili/backend/internal/modules/interaction"
@@ -28,14 +29,14 @@ type Modules struct {
 	Recommend   *recommend.Service
 }
 
-func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
+func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, producer *rocketmq.Producer, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
 	users := user.NewService(user.NewStore(db, client), objects, tokens, ids)
 	videos := video.NewService(video.NewStore(db), users)
 
 	return Modules{
 		User:        users,
 		Video:       videos,
-		Upload:      upload.NewService(videos),
+		Upload:      upload.NewService(videos, upload.NewStore(db), objects, producer, ids),
 		Danmaku:     danmaku.NewService(videos),
 		Comment:     comment.NewService(users, videos),
 		Interaction: interaction.NewService(users, videos),

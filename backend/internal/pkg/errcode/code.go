@@ -3,21 +3,25 @@ package errcode
 type Code int
 
 const (
-	Success         Code = 0
-	InvalidParams   Code = 10001
-	Unauthorized    Code = 10002
-	Forbidden       Code = 10003
-	NotFound        Code = 10004
-	TooManyRequests Code = 10005
-	InternalError   Code = 10500
-	UsernameExists  Code = 11001
-	EmailExists     Code = 11002
-	PhoneExists     Code = 11003
-	InvalidLogin    Code = 11004
-	AccountBanned   Code = 11005
-	UserNotFound    Code = 11006
-	WrongPassword   Code = 11007
-	InvalidRefresh  Code = 11008
+	Success                Code = 0
+	InvalidParams          Code = 10001
+	Unauthorized           Code = 10002
+	Forbidden              Code = 10003
+	NotFound               Code = 10004
+	TooManyRequests        Code = 10005
+	InternalError          Code = 10500
+	UsernameExists         Code = 11001
+	EmailExists            Code = 11002
+	PhoneExists            Code = 11003
+	InvalidLogin           Code = 11004
+	AccountBanned          Code = 11005
+	UserNotFound           Code = 11006
+	WrongPassword          Code = 11007
+	InvalidRefresh         Code = 11008
+	UploadNotFound         Code = 20001
+	InvalidUploadState     Code = 20002
+	InvalidUploadParts     Code = 20003
+	UnsupportedVideoFormat Code = 20004
 )
 
 func (c Code) Error() string {
@@ -56,6 +60,14 @@ func (c Code) Message() string {
 		return "原密码错误"
 	case InvalidRefresh:
 		return "刷新凭证无效或已过期"
+	case UploadNotFound:
+		return "上传任务不存在"
+	case InvalidUploadState:
+		return "上传任务状态无效或已结束"
+	case InvalidUploadParts:
+		return "分片不完整或文件大小校验失败"
+	case UnsupportedVideoFormat:
+		return "不支持的视频文件格式"
 	default:
 		return "未知错误"
 	}

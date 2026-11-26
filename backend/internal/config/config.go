@@ -45,11 +45,13 @@ type Redis struct {
 }
 
 type MinIO struct {
-	Endpoint  string `mapstructure:"endpoint" validate:"endpoint"`
-	AccessKey string `mapstructure:"access_key" validate:"required"`
-	SecretKey string `mapstructure:"secret_key" validate:"required"`
-	Bucket    string `mapstructure:"bucket" validate:"required"`
-	Secure    bool   `mapstructure:"secure"`
+	Endpoint       string `mapstructure:"endpoint" validate:"endpoint"`
+	PublicEndpoint string `mapstructure:"public_endpoint" validate:"omitempty,endpoint"`
+	PublicSecure   bool   `mapstructure:"public_secure"`
+	AccessKey      string `mapstructure:"access_key" validate:"required"`
+	SecretKey      string `mapstructure:"secret_key" validate:"required"`
+	Bucket         string `mapstructure:"bucket" validate:"required"`
+	Secure         bool   `mapstructure:"secure"`
 }
 
 type RocketMQ struct {
@@ -85,6 +87,9 @@ func Load(path string) (Config, error) {
 	var cfg Config
 	if err := v.UnmarshalExact(&cfg); err != nil {
 		return Config{}, fmt.Errorf("解析配置文件 %q: %w", path, err)
+	}
+	if cfg.MinIO.PublicEndpoint == "" {
+		cfg.MinIO.PublicEndpoint = cfg.MinIO.Endpoint
 	}
 	if err := validate(cfg); err != nil {
 		return Config{}, fmt.Errorf("校验配置文件 %q: %w", path, err)

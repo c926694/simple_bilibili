@@ -34,8 +34,8 @@
 - `backend` 每次启动连上 MySQL 后自动获取会话锁 `GET_LOCK('simple_bilibili_schema_migrate', 30)`，检查 `schema_migrations` 表并按版本号顺序幂等执行新增的 `.up.sql` 脚本，无需单独维护迁移容器。
 
 ### 3.2 MinIO 自动建桶与 Nginx 同源代理
-- `backend` 启动连接 MinIO 时自动检查并创建目标 Bucket（默认 `bilibili`），为 `avatars/*`、`covers/*`、`hls/*` 前缀配置匿名只读策略。
-- Nginx 在 `docker/nginx/default.conf` 中将 `/storage/` 反向代理至 `http://minio:9000/bilibili/`，前端通过同源路径 `/storage/...` 直接访问对象存储资源；本地可通过 `http://127.0.0.1:9001` 访问 MinIO 控制台（默认账号 `simple_bilibili_minio`、密码 `local_minio_password`）。
+- `backend` 启动连接 MinIO 时自动检查并创建目标 Bucket（默认 `bilibili`），为 `avatars/*`、`covers/*`、`dynamics/*`、`hls/*` 前缀配置匿名只读策略；MinIO 容器通过 `MINIO_API_STALE_UPLOADS_EXPIRY=24h` 周期自动清理超时未合并的废弃分片。
+- Nginx 在 `docker/nginx/default.conf` 中提供两条对象存储通路：`/storage/` 反向代理至 `http://minio:9000/bilibili/` 供前端同源访问公开资源；`/bilibili/` 关闭请求缓冲（`proxy_request_buffering off;`）并透传 `Host` 供浏览器使用预签名 URL 同源直传图片与视频分片。本地可通过 `http://127.0.0.1:9001` 访问 MinIO 控制台（默认账号 `simple_bilibili_minio`、密码 `local_minio_password`）。
 
 ### 3.3 RocketMQ Topic 自动创建
 `rmqbroker` 在 `docker/rocketmq/broker.conf` 中设置 `autoCreateTopicEnable = false`，由专门的 `rmq-topic-init` 容器负责在启动链路中显式创建 Topic：

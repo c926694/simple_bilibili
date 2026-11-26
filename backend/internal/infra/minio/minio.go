@@ -14,16 +14,29 @@ import (
 
 type Client struct {
 	client *minio.Client
+	core   minio.Core
+	signer *minio.Client
 	bucket string
 }
 
 func Connect(ctx context.Context, cfg config.MinIO) (*Client, error) {
+	creds := credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, "")
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Creds:  creds,
 		Secure: cfg.Secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("初始化 MinIO 客户端: %w", err)
+	}
+	endpoint := cfg.PublicEndpoint
+	if endpoint == "" {
+		endpoint = cfg.Endpoint
+	}
+	signer, err := minio.New(endpoint, &minio.Options{
+		Creds: creds, Secure: cfg.PublicSecure, BucketLookup: minio.BucketLookupPath, Region: "us-east-1",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("初始化 MinIO 签名客户端: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -47,6 +60,7 @@ func Connect(ctx context.Context, cfg config.MinIO) (*Client, error) {
 			"Resource": [
 				"arn:aws:s3:::%[1]s/avatars/*",
 				"arn:aws:s3:::%[1]s/covers/*",
+				"arn:aws:s3:::%[1]s/dynamics/*",
 				"arn:aws:s3:::%[1]s/hls/*"
 			]
 		}]
@@ -54,7 +68,7 @@ func Connect(ctx context.Context, cfg config.MinIO) (*Client, error) {
 	if err := client.SetBucketPolicy(ctx, cfg.Bucket, policy); err != nil {
 		return nil, fmt.Errorf("设置 MinIO 存储桶 %q 的访问策略: %w", cfg.Bucket, err)
 	}
-	return &Client{client: client, bucket: cfg.Bucket}, nil
+	return &Client{client: client, core: minio.Core{Client: client}, signer: signer, bucket: cfg.Bucket}, nil
 }
 
 func (c *Client) PutObject(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) error {

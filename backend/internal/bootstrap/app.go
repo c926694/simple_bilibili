@@ -18,18 +18,20 @@ import (
 	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/infra/mysql"
 	redisinfra "simple_bilibili/backend/internal/infra/redis"
+	"simple_bilibili/backend/internal/infra/rocketmq"
 	"simple_bilibili/backend/internal/pkg/jwt"
 	"simple_bilibili/backend/internal/pkg/snowflake"
 	"simple_bilibili/backend/migrations"
 )
 
 type App struct {
-	Modules Modules
-	config  config.App
-	db      *sqlx.DB
-	redis   *redis.Client
-	tokens  *jwt.Manager
-	logger  *slog.Logger
+	Modules  Modules
+	config   config.App
+	db       *sqlx.DB
+	redis    *redis.Client
+	producer *rocketmq.Producer
+	tokens   *jwt.Manager
+	logger   *slog.Logger
 }
 
 func Run(serve func(*App, context.Context) error) (err error) {
@@ -73,17 +75,22 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, errors.Join(err, client.Close(), db.Close())
 	}
+	producer, err := rocketmq.Connect(ctx, cfg.RocketMQ)
+	if err != nil {
+		return nil, errors.Join(err, client.Close(), db.Close())
+	}
 	tokens := jwt.New(cfg.JWT)
 	return &App{
-		Modules: NewModules(db, client, objects, tokens, ids),
-		config:  cfg.App,
-		db:      db,
-		redis:   client,
-		tokens:  tokens,
-		logger:  logger.New(cfg.App.Mode),
+		Modules:  NewModules(db, client, objects, producer, tokens, ids),
+		config:   cfg.App,
+		db:       db,
+		redis:    client,
+		producer: producer,
+		tokens:   tokens,
+		logger:   logger.New(cfg.App.Mode),
 	}, nil
 }
 
 func (a *App) Close() error {
-	return errors.Join(a.redis.Close(), a.db.Close())
+	return errors.Join(a.producer.Close(), a.redis.Close(), a.db.Close())
 }

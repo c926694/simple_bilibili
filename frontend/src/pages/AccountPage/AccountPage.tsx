@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/client'
+import { uploadApi } from '../../api/upload'
 import { userApi } from '../../api/user'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
 import { PRESET_AVATARS, UserAvatar } from '../../components/UserAvatar/UserAvatar'
@@ -120,8 +121,8 @@ export function AccountPage() {
     try {
       let finalAvatarUrl = avatarUrl.trim()
       if (pendingAvatarFile) {
-        const uploaded = await userApi.uploadAvatar(pendingAvatarFile)
-        finalAvatarUrl = uploaded.avatar_url
+        const uploaded = await uploadApi.uploadImageDirect('avatar', pendingAvatarFile)
+        finalAvatarUrl = uploaded.public_url
       }
 
       const updated = await userApi.updateMe({

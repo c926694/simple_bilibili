@@ -22,6 +22,8 @@ redis:
 
 minio:
   endpoint: "127.0.0.1:9000" # MinIO 主机与端口
+  public_endpoint: "127.0.0.1:8088" # 浏览器访问的主机与端口
+  public_secure: false
   access_key: simple_bilibili_minio
   secret_key: local_minio_password
   bucket: bilibili

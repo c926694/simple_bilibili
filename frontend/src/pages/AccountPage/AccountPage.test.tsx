@@ -26,7 +26,7 @@ const BASE_USER = {
   created_at: '2026-11-26T23:00:00Z',
 }
 
-describe('AccountPage 头像选择预览与点击保存后生效', () => {
+describe('AccountPage 头像选择预览与点击保存后预签名直传 MinIO', () => {
   beforeEach(() => {
     localStorage.clear()
     tokenStorage.setTokens({ access_token: 'acc', refresh_token: 'ref' })
@@ -39,17 +39,24 @@ describe('AccountPage 头像选择预览与点击保存后生效', () => {
     localStorage.clear()
   })
 
-  it('选择本地头像仅展示本地预览，点击保存后才上传并更新资料', async () => {
+  it('选择本地头像仅展示本地预览，点击保存后申请预签名直传 MinIO 并保存资料', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ code: 0, data: BASE_USER, msg: 'ok' }))
       .mockResolvedValueOnce(
         jsonResponse({
           code: 0,
-          data: { ...BASE_USER, avatar_url: '/storage/avatars/2001/999.png' },
+          data: {
+            upload_url: 'http://127.0.0.1:8088/bilibili/avatars/2001/999.png?X-Amz-Signature=abc',
+            object_key: 'avatars/2001/999.png',
+            public_url: '/storage/avatars/2001/999.png',
+            headers: { 'Content-Type': 'image/png' },
+            expires_in: 300,
+          },
           msg: 'ok',
         }),
       )
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { ETag: '"etag-1"' } }))
       .mockResolvedValueOnce(
         jsonResponse({
           code: 0,
@@ -78,7 +85,6 @@ describe('AccountPage 头像选择预览与点击保存后生效', () => {
     fireEvent.change(fileInput, { target: { files: [file] } })
 
     expect(await screen.findByText(/已选择：new-avatar\.png（点击保存后上传生效）/)).toBeInTheDocument()
-    // 选图后未发上传请求，仅本地预览更新，顶栏头像仍保持原地址
     expect(fetchSpy).toHaveBeenCalledTimes(1)
 
     fireEvent.change(screen.getByLabelText('昵称'), { target: { value: '保存后的昵称' } })
@@ -88,10 +94,14 @@ describe('AccountPage 头像选择预览与点击保存后生效', () => {
       expect(screen.getByText('个人资料保存成功')).toBeInTheDocument()
     })
 
-    expect(fetchSpy).toHaveBeenCalledTimes(3)
-    expect(fetchSpy.mock.calls[1][0]).toBe('/api/v1/users/me/avatar')
-    expect(fetchSpy.mock.calls[2][0]).toBe('/api/v1/users/me')
-    const updateBody = JSON.parse((fetchSpy.mock.calls[2][1] as RequestInit).body as string)
+    expect(fetchSpy).toHaveBeenCalledTimes(4)
+    expect(fetchSpy.mock.calls[1][0]).toBe('/api/v1/uploads/image-presign')
+    expect(fetchSpy.mock.calls[2][0]).toBe(
+      'http://127.0.0.1:8088/bilibili/avatars/2001/999.png?X-Amz-Signature=abc',
+    )
+    expect((fetchSpy.mock.calls[2][1] as RequestInit).method).toBe('PUT')
+    expect(fetchSpy.mock.calls[3][0]).toBe('/api/v1/users/me')
+    const updateBody = JSON.parse((fetchSpy.mock.calls[3][1] as RequestInit).body as string)
     expect(updateBody.avatar_url).toBe('/storage/avatars/2001/999.png')
     expect(updateBody.nickname).toBe('保存后的昵称')
   })

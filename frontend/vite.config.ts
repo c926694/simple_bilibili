@@ -24,6 +24,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/storage/, '/bilibili'),
       },
+      '/bilibili': {
+        target: 'http://127.0.0.1:9000',
+        changeOrigin: false,
+      },
       '/ws': {
         target: 'ws://127.0.0.1:8080',
         ws: true,

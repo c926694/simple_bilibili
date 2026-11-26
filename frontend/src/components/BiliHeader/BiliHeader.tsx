@@ -229,7 +229,7 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
           <button
             type="button"
             className="bili-upload-btn"
-            onClick={() => (user ? navigate('/account') : openAuthModal('login'))}
+            onClick={() => (user ? navigate('/upload') : openAuthModal('login'))}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
