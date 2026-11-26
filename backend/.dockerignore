@@ -1,0 +1,5 @@
+bin
+configs/config.yaml
+coverage.out
+*.log
+*.test

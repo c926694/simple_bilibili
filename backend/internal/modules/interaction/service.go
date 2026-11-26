@@ -1,9 +1,15 @@
 package interaction
 
+import (
+	"simple_bilibili/backend/internal/modules/user"
+	"simple_bilibili/backend/internal/modules/video"
+)
+
 type Service struct {
-	videos VideoReader
+	users  *user.Service
+	videos *video.Service
 }
 
-func NewService(videos VideoReader) *Service {
-	return &Service{videos: videos}
+func NewService(users *user.Service, videos *video.Service) *Service {
+	return &Service{users: users, videos: videos}
 }

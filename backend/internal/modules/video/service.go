@@ -3,14 +3,16 @@ package video
 import (
 	"context"
 	"fmt"
+
+	"simple_bilibili/backend/internal/modules/user"
 )
 
 type Service struct {
 	store *Store
-	users UserReader
+	users *user.Service
 }
 
-func NewService(store *Store, users UserReader) *Service {
+func NewService(store *Store, users *user.Service) *Service {
 	return &Service{store: store, users: users}
 }
 

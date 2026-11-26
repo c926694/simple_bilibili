@@ -10,16 +10,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/response"
 )
 
 func (a *App) RunAPI(ctx context.Context) error {
 	gin.SetMode(a.config.Mode)
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.GET("/healthz", func(c *gin.Context) {
-		response.OK(c, gin.H{"status": "ok"})
-	})
+	router := newRouter()
 
 	listener, err := net.Listen("tcp", a.config.HTTPAddr)
 	if err != nil {
@@ -47,6 +44,31 @@ func (a *App) RunAPI(ctx context.Context) error {
 		}
 		return httpServeError(<-served)
 	}
+}
+
+func newRouter() *gin.Engine {
+	router := gin.New()
+	// 路径末尾的斜杠需要按未匹配路由处理，确保响应仍为 HTTP 200。
+	router.RedirectTrailingSlash = false
+	router.HandleMethodNotAllowed = true
+	router.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
+		if c.Writer.Written() {
+			c.Abort()
+			return
+		}
+		response.Fail(c, errcode.InternalError, "")
+	}))
+
+	router.NoRoute(func(c *gin.Context) {
+		response.Fail(c, errcode.NotFound, "")
+	})
+	router.NoMethod(func(c *gin.Context) {
+		response.Fail(c, errcode.NotFound, "请求方法不允许")
+	})
+	router.GET("/healthz", func(c *gin.Context) {
+		response.OK(c, gin.H{"status": "ok"})
+	})
+	return router
 }
 
 func httpServeError(err error) error {
