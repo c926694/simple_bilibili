@@ -2,7 +2,7 @@
 
 ## 1. 组件编排清单
 
-`docker/docker-compose.yml` 按精简原则编排 7 个服务，均接入自定义网桥 `simple_bilibili_net`：
+`docker/docker-compose.yml` 设置项目名为 `simple_bilibili`，所有容器、自建镜像、数据卷与网络均统一以 `simple_bilibili` 开头，按精简原则编排 7 个服务：
 
 | 服务名 | 镜像 / 构建文件 | 端口映射 | 职责说明 |
 | :--- | :--- | :--- | :--- |

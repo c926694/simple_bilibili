@@ -1,7 +1,9 @@
+name: simple_bilibili
+
 services:
   mysql:
     image: mysql:8.4
-    container_name: simple_bilibili_mysql
+    container_name: simple_bilibili-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
@@ -20,11 +22,11 @@ services:
       retries: 20
       start_period: 15s
     networks:
-      - simple_bilibili_net
+      - network
 
   redis:
     image: redis:7.4-alpine
-    container_name: simple_bilibili_redis
+    container_name: simple_bilibili-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -37,11 +39,11 @@ services:
       timeout: 3s
       retries: 15
     networks:
-      - simple_bilibili_net
+      - network
 
   rmqnamesrv:
     image: apache/rocketmq:5.3.4
-    container_name: simple_bilibili_rmqnamesrv
+    container_name: simple_bilibili-rmqnamesrv
     restart: unless-stopped
     command: ["sh", "mqnamesrv"]
     environment:
@@ -55,11 +57,11 @@ services:
       retries: 20
       start_period: 10s
     networks:
-      - simple_bilibili_net
+      - network
 
   rmqbroker:
     image: apache/rocketmq:5.3.4
-    container_name: simple_bilibili_rmqbroker
+    container_name: simple_bilibili-rmqbroker
     user: "0:0"
     restart: unless-stopped
     depends_on:
@@ -89,11 +91,11 @@ services:
       retries: 20
       start_period: 15s
     networks:
-      - simple_bilibili_net
+      - network
 
   rmq-topic-init:
     image: apache/rocketmq:5.3.4
-    container_name: simple_bilibili_rmq_topic_init
+    container_name: simple_bilibili-rmq-topic-init
     restart: "no"
     depends_on:
       rmqbroker:
@@ -106,16 +108,17 @@ services:
     volumes:
       - ./rocketmq/init-topics.sh:/init-topics.sh:ro
     networks:
-      - simple_bilibili_net
+      - network
 
   backend:
+    image: simple_bilibili-backend:latest
     build:
       context: ../backend
       dockerfile: ../docker/backend.Dockerfile
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         APK_MIRROR: ${APK_MIRROR:-mirrors.aliyun.com}
-    container_name: simple_bilibili_backend
+    container_name: simple_bilibili-backend
     restart: unless-stopped
     depends_on:
       mysql:
@@ -143,15 +146,16 @@ services:
       retries: 15
       start_period: 5s
     networks:
-      - simple_bilibili_net
+      - network
 
   frontend:
+    image: simple_bilibili-frontend:latest
     build:
       context: ../frontend
       dockerfile: ../docker/frontend.Dockerfile
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
-    container_name: simple_bilibili_frontend
+    container_name: simple_bilibili-frontend
     restart: unless-stopped
     depends_on:
       backend:
@@ -166,7 +170,7 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - simple_bilibili_net
+      - network
 
 volumes:
   mysql_data:
@@ -174,5 +178,5 @@ volumes:
   rmqbroker_store:
 
 networks:
-  simple_bilibili_net:
+  network:
     driver: bridge
