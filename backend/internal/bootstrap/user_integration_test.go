@@ -47,13 +47,15 @@ type integrationProfile struct {
 	Nickname    string  `json:"nickname"`
 	Email       *string `json:"email"`
 	Phone       *string `json:"phone"`
+	AvatarURL   string  `json:"avatar_url"`
 	CoinBalance int     `json:"coin_balance"`
 	CreatedAt   string  `json:"created_at"`
 }
 
 const (
-	authURL  = "/api/v1/auth"
-	usersURL = "/api/v1/users"
+	authURL       = "/api/v1/auth"
+	usersURL      = "/api/v1/users"
+	defaultAvatar = "/avatars/default.webp"
 )
 
 func TestUserAuthenticationIntegration(t *testing.T) {
@@ -136,12 +138,14 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	}
 
 	primaryEmail, secondaryEmail := primaryName+"@example.test", secondaryName+"@example.test"
-	initialPassword, secondaryPassword := "initial-password", "another-password"
+	initialPassword, secondaryPassword := "1", "another-password"
+	longPassword := strings.Repeat("密码-", 256)
 	primary := map[string]string{"username": primaryName, "password": initialPassword, "email": primaryEmail, "phone": primaryPhone}
 	secondary := map[string]string{"username": secondaryName, "password": secondaryPassword, "email": secondaryEmail, "phone": secondaryPhone}
 
 	main.call(t, http.MethodGet, "/healthz", "", nil, 0, nil)
 	main.call(t, http.MethodPost, authURL+"/register", "", map[string]string{"username": "!"}, 10001, nil)
+	main.call(t, http.MethodPost, authURL+"/register", "", map[string]string{"username": primaryName, "password": ""}, 10001, nil)
 	var first, second, optional struct {
 		userTokens
 		User integrationProfile `json:"user"`
@@ -151,7 +155,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	main.call(t, http.MethodPost, authURL+"/register", "", secondary, 0, &second)
 	trackUser(second.User.ID)
 	main.call(t, http.MethodPost, authURL+"/register", "", map[string]string{
-		"username": optionalName, "password": initialPassword, "email": "", "phone": "",
+		"username": optionalName, "password": longPassword, "email": "", "phone": "",
 	}, 0, &optional)
 	trackUser(optional.User.ID)
 	if optional.User.Email != nil || optional.User.Phone != nil {
@@ -160,7 +164,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	parsedID, err := strconv.ParseInt(first.User.ID, 10, 64)
 	if err != nil || parsedID <= 1<<53 || first.User.Username != primaryName || first.User.Nickname != primaryName ||
 		first.User.CoinBalance != 10 || first.User.Email == nil || *first.User.Email != primaryEmail ||
-		first.User.Phone == nil || *first.User.Phone != primaryPhone {
+		first.User.Phone == nil || *first.User.Phone != primaryPhone || first.User.AvatarURL != defaultAvatar {
 		t.Fatalf("注册后的用户资料不符: %+v", first.User)
 	}
 	if _, err := time.Parse(time.RFC3339, first.User.CreatedAt); err != nil {
@@ -199,6 +203,8 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 		logins = append(logins, login.userTokens)
 	}
 	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": primaryName, "password": "incorrect"}, 11004, nil)
+	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": primaryName, "password": ""}, 10001, nil)
+	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": optionalName, "password": longPassword}, 0, nil)
 	if _, err := app.db.ExecContext(t.Context(), "UPDATE user SET status = 2 WHERE id = ?", second.User.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +214,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	main.call(t, http.MethodGet, usersURL+"/me", first.Refresh, nil, 10002, nil)
 	var me integrationProfile
 	main.call(t, http.MethodGet, usersURL+"/me", first.Access, nil, 0, &me)
-	if me.ID != first.User.ID || me.Username != primaryName {
+	if me.ID != first.User.ID || me.Username != primaryName || me.AvatarURL != defaultAvatar {
 		t.Fatalf("个人资料不符: %+v", me)
 	}
 	var public map[string]any
@@ -238,6 +244,13 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 			t.Fatalf("%s 应为 JSON null", field)
 		}
 	}
+	var reset integrationProfile
+	main.call(t, http.MethodPut, usersURL+"/me", first.Access, map[string]string{
+		"nickname": "新昵称", "avatar_url": "",
+	}, 0, &reset)
+	if reset.AvatarURL != defaultAvatar {
+		t.Fatalf("清空头像后返回 %q，期望 %q", reset.AvatarURL, defaultAvatar)
+	}
 
 	var rotated userTokens
 	main.call(t, http.MethodPost, authURL+"/refresh", "", refreshBody(first.Refresh), 0, &rotated)
@@ -262,23 +275,31 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	main.call(t, http.MethodPost, authURL+"/logout", logins[1].Access, map[string]string{}, 0, nil)
 	main.call(t, http.MethodGet, usersURL+"/me", logins[1].Access, nil, 10002, nil)
 
-	newPassword := strings.Repeat("密", 64)
 	revocationKey(first.Access)
+	main.call(t, http.MethodPut, usersURL+"/me/password", first.Access, map[string]string{
+		"old_password": initialPassword, "new_password": "",
+	}, 10001, nil)
 	main.call(t, http.MethodPut, usersURL+"/me/password", first.Access, map[string]string{
 		"old_password": initialPassword, "new_password": initialPassword,
 	}, 10001, nil)
 	main.call(t, http.MethodPut, usersURL+"/me/password", first.Access, map[string]string{
-		"old_password": "incorrect", "new_password": newPassword,
+		"old_password": "incorrect", "new_password": longPassword,
 	}, 11007, nil)
 	main.call(t, http.MethodPut, usersURL+"/me/password", first.Access, map[string]string{
-		"old_password": initialPassword, "new_password": newPassword,
+		"old_password": initialPassword, "new_password": longPassword,
 	}, 0, nil)
 	main.call(t, http.MethodGet, usersURL+"/me", first.Access, nil, 10002, nil)
 	for _, login := range logins {
 		main.call(t, http.MethodPost, authURL+"/refresh", "", refreshBody(login.Refresh), 11008, nil)
 	}
 	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": primaryName, "password": initialPassword}, 11004, nil)
-	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": primaryName, "password": newPassword}, 0, nil)
+	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": primaryName, "password": longPassword}, 0, nil)
+
+	revocationKey(optional.Access)
+	main.call(t, http.MethodPut, usersURL+"/me/password", optional.Access, map[string]string{
+		"old_password": longPassword, "new_password": "123",
+	}, 0, nil)
+	main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": optionalName, "password": "123"}, 0, nil)
 
 	for _, path := range []struct {
 		url   string

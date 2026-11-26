@@ -86,8 +86,8 @@ export function AccountPage() {
       setPasswordNotice({ type: 'error', text: '请输入当前密码' })
       return
     }
-    if (newPassword.length < 6 || newPassword.length > 64) {
-      setPasswordNotice({ type: 'error', text: '新密码长度需在 6~64 位之间' })
+    if (!newPassword) {
+      setPasswordNotice({ type: 'error', text: '请输入新密码' })
       return
     }
     if (newPassword === oldPassword) {
@@ -339,7 +339,7 @@ export function AccountPage() {
                       id="new-password"
                       type="password"
                       className="account-input"
-                      placeholder="6~64 位字符"
+                      placeholder="请输入新密码"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       autoComplete="new-password"

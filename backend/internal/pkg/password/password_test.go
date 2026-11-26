@@ -9,7 +9,7 @@ import (
 )
 
 func TestHashAndCompare(t *testing.T) {
-	for _, value := range []string{"bili-password", strings.Repeat("密", 64)} {
+	for _, value := range []string{"1", "\x00 \n", strings.Repeat("密", 1024)} {
 		first, err := Hash(value)
 		if err != nil {
 			t.Fatal(err)
@@ -27,5 +27,16 @@ func TestHashAndCompare(t *testing.T) {
 		if err := Compare(first, value+"x"); !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 			t.Fatalf("密码不匹配时返回 %v", err)
 		}
+	}
+}
+
+func TestCompareLegacyBcrypt(t *testing.T) {
+	const value = "existing-password"
+	hash, err := bcrypt.GenerateFromPassword([]byte(value), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Compare(string(hash), value); err != nil {
+		t.Fatal(err)
 	}
 }

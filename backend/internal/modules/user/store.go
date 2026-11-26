@@ -69,10 +69,10 @@ func (s *Store) checkRegistration(ctx context.Context, input registerInput) erro
 
 func (s *Store) insert(ctx context.Context, a account) error {
 	const query = `INSERT INTO user
-		(id, username, nickname, email, phone, password_hash, coin_balance, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(id, username, nickname, email, phone, avatar_url, password_hash, coin_balance, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := tx.Executor(ctx, s.db).ExecContext(ctx, query, a.ID, a.Username, a.Nickname, a.Email, a.Phone,
-		a.PasswordHash, a.CoinBalance, a.Status, a.CreatedAt)
+		a.AvatarURL, a.PasswordHash, a.CoinBalance, a.Status, a.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("创建用户: %w", duplicateAccountError(err))
 	}

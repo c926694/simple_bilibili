@@ -9,24 +9,20 @@ import (
 )
 
 const (
-	bcryptLimit = 72
-	longPrefix  = "sha256:"
+	bcryptLimit  = 72
+	digestPrefix = "sha256:"
 )
 
 func Hash(value string) (string, error) {
-	if len(value) > bcryptLimit {
-		hash, err := bcrypt.GenerateFromPassword(digest(value), bcrypt.DefaultCost)
-		if err != nil {
-			return "", err
-		}
-		return longPrefix + string(hash), nil
+	hash, err := bcrypt.GenerateFromPassword(digest(value), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(value), bcrypt.DefaultCost)
-	return string(hash), err
+	return digestPrefix + string(hash), nil
 }
 
 func Compare(hash, value string) error {
-	if stored, ok := strings.CutPrefix(hash, longPrefix); ok {
+	if stored, ok := strings.CutPrefix(hash, digestPrefix); ok {
 		return bcrypt.CompareHashAndPassword([]byte(stored), digest(value))
 	}
 	if len(value) > bcryptLimit {
@@ -36,7 +32,7 @@ func Compare(hash, value string) error {
 }
 
 func digest(value string) []byte {
-	// bcrypt 的输入最多为 72 字节，先将长密码编码为固定长度的摘要。
+	// 将任意长度的密码编码为固定长度的摘要，满足 bcrypt 的输入长度要求。
 	sum := sha256.Sum256([]byte(value))
 	return []byte(base64.RawStdEncoding.EncodeToString(sum[:]))
 }

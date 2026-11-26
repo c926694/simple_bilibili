@@ -34,7 +34,7 @@ func NewHandler(service *Service, logger *slog.Logger) *Handler {
 func (h *Handler) register(c *gin.Context) {
 	var input registerInput
 	if err := c.ShouldBindJSON(&input); err != nil || !usernamePattern.MatchString(input.Username) ||
-		!validPassword(input.Password) || utf8.RuneCountInString(input.Nickname) > 32 ||
+		input.Password == "" || utf8.RuneCountInString(input.Nickname) > 32 ||
 		!validContact(input.Email, input.Phone) {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
@@ -90,6 +90,9 @@ func (h *Handler) updateProfile(c *gin.Context) {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
 	}
+	if input.AvatarURL == "" {
+		input.AvatarURL = defaultAvatarURL
+	}
 	input.Email, input.Phone = emptyAsNull(input.Email), emptyAsNull(input.Phone)
 	result, err := h.service.UpdateProfile(c.Request.Context(), c.GetInt64(middleware.UserIDKey), input)
 	h.respond(c, result, err)
@@ -98,7 +101,7 @@ func (h *Handler) updateProfile(c *gin.Context) {
 func (h *Handler) changePassword(c *gin.Context) {
 	var input passwordInput
 	if err := c.ShouldBindJSON(&input); err != nil || input.OldPassword == "" ||
-		!validPassword(input.NewPassword) || input.OldPassword == input.NewPassword {
+		input.NewPassword == "" || input.OldPassword == input.NewPassword {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
 	}
@@ -135,11 +138,6 @@ func currentAccess(c *gin.Context) accessSession {
 		UserID: c.GetInt64(middleware.UserIDKey), JTI: c.GetString(middleware.JTIKey),
 		ExpiresAt: c.GetTime(middleware.ExpiryKey),
 	}
-}
-
-func validPassword(value string) bool {
-	length := utf8.RuneCountInString(value)
-	return length >= 6 && length <= 64
 }
 
 func validContact(email, phone *string) bool {

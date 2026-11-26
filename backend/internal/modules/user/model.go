@@ -3,8 +3,9 @@ package user
 import "time"
 
 const (
-	statusActive = 1
-	initialCoins = 10
+	statusActive     = 1
+	initialCoins     = 10
+	defaultAvatarURL = "/avatars/default.webp"
 )
 
 type account struct {

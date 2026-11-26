@@ -43,7 +43,7 @@ func (s *Service) Register(ctx context.Context, input registerInput) (authRespon
 	}
 	newAccount := account{profileResponse: profileResponse{
 		ID: s.ids.Next(), Username: input.Username, Nickname: input.Nickname,
-		Email: input.Email, Phone: input.Phone, CoinBalance: initialCoins,
+		Email: input.Email, Phone: input.Phone, AvatarURL: defaultAvatarURL, CoinBalance: initialCoins,
 		CreatedAt: time.Now().UTC().Truncate(time.Second),
 	}, Status: statusActive}
 	hash, err := password.Hash(input.Password)

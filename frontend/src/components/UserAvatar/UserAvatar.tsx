@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
+export const DEFAULT_AVATAR_URL = '/avatars/default.webp'
+
 export const PRESET_AVATARS = [
+  { label: '默认头像', url: DEFAULT_AVATAR_URL },
   { label: '小电视粉', url: '/avatars/pink-tv.svg' },
   { label: '哔哩蓝', url: '/avatars/blue-tv.svg' },
   { label: '晴空橙', url: '/avatars/orange-sun.svg' },
@@ -22,49 +25,28 @@ export function UserAvatar({ src, nickname, size = 38, className = '' }: UserAva
     setImgFailed(false)
   }, [src])
 
-  const initial = (nickname || 'B').trim().charAt(0).toUpperCase()
-
-  if (src && !imgFailed) {
-    return (
-      <img
-        src={src}
-        alt={nickname}
-        width={size}
-        height={size}
-        className={className}
-        onError={() => setImgFailed(true)}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: '50%',
-          objectFit: 'cover',
-          display: 'block',
-          flexShrink: 0,
-        }}
-      />
-    )
-  }
+  const resolvedSrc = !imgFailed && src ? src : DEFAULT_AVATAR_URL
 
   return (
-    <span
+    <img
+      src={resolvedSrc}
+      alt={nickname}
+      width={size}
+      height={size}
       className={className}
-      aria-label={nickname}
+      onError={() => {
+        if (!imgFailed && src && src !== DEFAULT_AVATAR_URL) {
+          setImgFailed(true)
+        }
+      }}
       style={{
         width: size,
         height: size,
         borderRadius: '50%',
-        background: 'linear-gradient(135deg, #00aeec 0%, #fb7299 100%)',
-        color: '#ffffff',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 600,
-        fontSize: Math.max(13, Math.round(size * 0.42)),
+        objectFit: 'cover',
+        display: 'block',
         flexShrink: 0,
-        userSelect: 'none',
       }}
-    >
-      {initial}
-    </span>
+    />
   )
 }

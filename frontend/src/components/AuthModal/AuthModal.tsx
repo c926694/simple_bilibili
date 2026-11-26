@@ -72,8 +72,8 @@ export function AuthModal() {
       setErrorMsg('用户名需为 3~32 位字母、数字或下划线')
       return
     }
-    if (registerPassword.length < 6 || registerPassword.length > 64) {
-      setErrorMsg('密码长度需在 6~64 位之间')
+    if (!registerPassword) {
+      setErrorMsg('请输入注册密码')
       return
     }
     if (registerPassword !== confirmPassword) {
@@ -253,7 +253,7 @@ export function AuthModal() {
                 <input
                   type="password"
                   className="auth-form__input"
-                  placeholder="6~64位密码"
+                  placeholder="请输入密码"
                   value={registerPassword}
                   onChange={(e) => setRegisterPassword(e.target.value)}
                   onFocus={() => setPasswordFocused(true)}
