@@ -24,6 +24,27 @@ services:
     networks:
       - network
 
+  mysql-migrate:
+    image: mysql:8.4
+    container_name: simple_bilibili-mysql-migrate
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["sh", "/run-migrations.sh"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-simple_bilibili}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_mysql_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-simple_bilibili}
+      MIGRATIONS_DIR: /migrations
+    volumes:
+      - ./mysql/run-migrations.sh:/run-migrations.sh:ro
+      - ../backend/migrations:/migrations:ro
+    networks:
+      - network
+
   redis:
     image: redis:7.4-alpine
     container_name: simple_bilibili-redis
@@ -121,8 +142,8 @@ services:
     container_name: simple_bilibili-backend
     restart: unless-stopped
     depends_on:
-      mysql:
-        condition: service_healthy
+      mysql-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       rmq-topic-init:

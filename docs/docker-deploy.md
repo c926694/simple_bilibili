@@ -2,16 +2,17 @@
 
 ## 1. 组件编排清单
 
-`docker/docker-compose.yml` 设置项目名为 `simple_bilibili`，所有容器、自建镜像、数据卷与网络均统一以 `simple_bilibili` 开头，按精简原则编排 7 个服务：
+`docker/docker-compose.yml` 设置项目名为 `simple_bilibili`，所有容器、自建镜像、数据卷与网络均统一以 `simple_bilibili` 开头，按精简原则编排 8 个服务：
 
 | 服务名 | 镜像 / 构建文件 | 端口映射 | 职责说明 |
 | :--- | :--- | :--- | :--- |
 | `mysql` | `mysql:8.4` | `3306:3306` | 业务数据库持久化，配置健康检查与持久化卷 `mysql_data` |
+| `mysql-migrate` | `mysql:8.4` | 无 | 一次性迁移服务（`restart: "no"`），在 `mysql` 健康后执行 `docker/mysql/run-migrations.sh` 按顺序运行 `backend/migrations/*.up.sql` 并记录版本至 `schema_migrations`，完成后正常退出 |
 | `redis` | `redis:7.4-alpine` | `6379:6379` | 缓存、限流与推荐召回池，开启 AOF 持久化卷 `redis_data` |
 | `rmqnamesrv` | `apache/rocketmq:5.3.4` | `9876:9876` | RocketMQ NameServer，JVM 堆内存限制为 256MB |
 | `rmqbroker` | `apache/rocketmq:5.3.4` | `10911:10911`、`10909:10909` | RocketMQ Broker，挂载 `docker/rocketmq/broker.conf`，关闭自动建 Topic，JVM 堆内存限制为 512MB |
 | `rmq-topic-init` | `apache/rocketmq:5.3.4` | 无 | 一次性初始化服务（`restart: "no"`），在 `rmqbroker` 健康后执行 `docker/rocketmq/init-topics.sh` 自动创建全部业务 Topic，完成后正常退出 |
-| `backend` | `docker/backend.Dockerfile` | `8080:8080` | 单 Go 后端服务，等待 MySQL、Redis 健康及 `rmq-topic-init` 执行成功后启动，通过 `BILIBILI_*` 环境变量覆盖容器内连接地址 |
+| `backend` | `docker/backend.Dockerfile` | `8080:8080` | 单 Go 后端服务，等待 `mysql-migrate` 执行成功、Redis 健康及 `rmq-topic-init` 执行成功后启动，通过 `BILIBILI_*` 环境变量覆盖容器内连接地址 |
 | `frontend` | `docker/frontend.Dockerfile` | `8088:80` | Nginx 托管前端构建产物，挂载 `docker/nginx/default.conf` 处理 SPA 路由回退及 `/api/`、`/healthz`、`/ws/` 反向代理 |
 
 ## 2. Dockerfile 构建代理与缓存策略
