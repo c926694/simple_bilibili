@@ -219,6 +219,24 @@
   color: var(--bili-text-3);
 }
 
+.avatar-pending-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--bili-blue);
+}
+
+.avatar-cancel-btn {
+  font-size: 12px;
+  color: var(--bili-text-2);
+  text-decoration: underline;
+}
+
+.avatar-cancel-btn:hover {
+  color: var(--bili-danger);
+}
+
 .account-feedback {
   padding: 10px 14px;
   border-radius: 6px;

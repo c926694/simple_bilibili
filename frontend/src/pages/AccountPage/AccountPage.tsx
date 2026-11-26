@@ -19,10 +19,11 @@ export function AccountPage() {
   const [nickname, setNickname] = useState('')
   const [bio, setBio] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null)
+  const [pendingAvatarPreview, setPendingAvatarPreview] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [profileNotice, setProfileNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null,
   )
@@ -47,7 +48,25 @@ export function AccountPage() {
     setPhone(user.phone ?? '')
   }, [user])
 
-  const handleAvatarFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    return () => {
+      if (pendingAvatarPreview) {
+        URL.revokeObjectURL(pendingAvatarPreview)
+      }
+    }
+  }, [pendingAvatarPreview])
+
+  const clearPendingAvatar = () => {
+    setPendingAvatarFile(null)
+    setPendingAvatarPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return null
+    })
+  }
+
+  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) {
@@ -63,20 +82,24 @@ export function AccountPage() {
       return
     }
 
-    setUploadingAvatar(true)
-    try {
-      const updated = await userApi.uploadAvatar(file)
-      setUser(updated)
-      setAvatarUrl(updated.avatar_url)
-      setProfileNotice({ type: 'success', text: '头像已上传至对象存储并更新成功' })
-    } catch (err) {
-      setProfileNotice({
-        type: 'error',
-        text: err instanceof ApiError ? err.message : '头像上传失败，请稍后重试',
-      })
-    } finally {
-      setUploadingAvatar(false)
-    }
+    const previewUrl = URL.createObjectURL(file)
+    setPendingAvatarFile(file)
+    setPendingAvatarPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return previewUrl
+    })
+  }
+
+  const handleSelectPresetAvatar = (url: string) => {
+    clearPendingAvatar()
+    setAvatarUrl(url)
+  }
+
+  const handleAvatarUrlInputChange = (value: string) => {
+    clearPendingAvatar()
+    setAvatarUrl(value)
   }
 
   const handleProfileSubmit = async (event: FormEvent) => {
@@ -95,13 +118,21 @@ export function AccountPage() {
 
     setSavingProfile(true)
     try {
+      let finalAvatarUrl = avatarUrl.trim()
+      if (pendingAvatarFile) {
+        const uploaded = await userApi.uploadAvatar(pendingAvatarFile)
+        finalAvatarUrl = uploaded.avatar_url
+      }
+
       const updated = await userApi.updateMe({
         nickname: trimmedNickname,
         bio: bio.trim(),
-        avatar_url: avatarUrl.trim(),
+        avatar_url: finalAvatarUrl,
         email: email.trim(),
         phone: phone.trim(),
       })
+      clearPendingAvatar()
+      setAvatarUrl(updated.avatar_url)
       setUser(updated)
       setProfileNotice({ type: 'success', text: '个人资料保存成功' })
     } catch (err) {
@@ -216,7 +247,11 @@ export function AccountPage() {
             {activeTab === 'profile' ? (
               <>
                 <div className="account-summary">
-                  <UserAvatar src={avatarUrl} nickname={nickname || user.nickname} size={64} />
+                  <UserAvatar
+                    src={pendingAvatarPreview ?? avatarUrl}
+                    nickname={nickname || user.nickname}
+                    size={64}
+                  />
                   <div className="account-summary__info">
                     <div className="account-summary__name">{user.nickname}</div>
                     <div className="account-summary__meta">
@@ -262,12 +297,24 @@ export function AccountPage() {
                           type="button"
                           className="avatar-upload-btn"
                           onClick={() => fileInputRef.current?.click()}
-                          disabled={uploadingAvatar}
+                          disabled={savingProfile}
                         >
-                          {uploadingAvatar ? '上传中...' : '上传本地头像'}
+                          选择本地头像
                         </button>
                         <span className="avatar-upload-hint">支持 JPG / PNG / WebP / GIF，最大 5MB</span>
                       </div>
+                      {pendingAvatarFile && (
+                        <div className="avatar-pending-tag" role="status">
+                          <span>已选择：{pendingAvatarFile.name}（点击保存后上传生效）</span>
+                          <button
+                            type="button"
+                            className="avatar-cancel-btn"
+                            onClick={clearPendingAvatar}
+                          >
+                            取消选择
+                          </button>
+                        </div>
+                      )}
                       <div className="avatar-presets" aria-label="预设头像">
                         {PRESET_AVATARS.map((item) => (
                           <button
@@ -275,9 +322,11 @@ export function AccountPage() {
                             type="button"
                             title={item.label}
                             className={`avatar-preset-btn ${
-                              avatarUrl === item.url ? 'avatar-preset-btn--selected' : ''
+                              !pendingAvatarFile && avatarUrl === item.url
+                                ? 'avatar-preset-btn--selected'
+                                : ''
                             }`}
-                            onClick={() => setAvatarUrl(item.url)}
+                            onClick={() => handleSelectPresetAvatar(item.url)}
                           >
                             <UserAvatar src={item.url} nickname={item.label} size={42} />
                           </button>
@@ -289,7 +338,7 @@ export function AccountPage() {
                         className="account-input"
                         placeholder="输入头像 URL（支持 /storage/...、/avatars/... 或 http(s)://...）"
                         value={avatarUrl}
-                        onChange={(e) => setAvatarUrl(e.target.value)}
+                        onChange={(e) => handleAvatarUrlInputChange(e.target.value)}
                         maxLength={512}
                       />
                     </div>
