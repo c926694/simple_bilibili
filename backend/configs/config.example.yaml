@@ -22,9 +22,9 @@ redis:
 
 minio:
   endpoint: "127.0.0.1:9000" # MinIO 主机与端口
-  access_key: local_minio_access
-  secret_key: local_minio_secret
-  bucket: videos
+  access_key: simple_bilibili_minio
+  secret_key: local_minio_password
+  bucket: bilibili
   secure: false              # 是否使用 HTTPS
 
 rocketmq:

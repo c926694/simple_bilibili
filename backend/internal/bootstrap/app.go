@@ -15,10 +15,12 @@ import (
 
 	"simple_bilibili/backend/internal/config"
 	"simple_bilibili/backend/internal/infra/logger"
+	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/infra/mysql"
 	redisinfra "simple_bilibili/backend/internal/infra/redis"
 	"simple_bilibili/backend/internal/pkg/jwt"
 	"simple_bilibili/backend/internal/pkg/snowflake"
+	"simple_bilibili/backend/migrations"
 )
 
 type App struct {
@@ -60,13 +62,20 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := mysql.Migrate(ctx, cfg.MySQL, migrations.FS); err != nil {
+		return nil, errors.Join(err, db.Close())
+	}
 	client, err := redisinfra.Connect(ctx, cfg.Redis)
 	if err != nil {
 		return nil, errors.Join(err, db.Close())
 	}
+	objects, err := minio.Connect(ctx, cfg.MinIO)
+	if err != nil {
+		return nil, errors.Join(err, client.Close(), db.Close())
+	}
 	tokens := jwt.New(cfg.JWT)
 	return &App{
-		Modules: NewModules(db, client, tokens, ids),
+		Modules: NewModules(db, client, objects, tokens, ids),
 		config:  cfg.App,
 		db:      db,
 		redis:   client,

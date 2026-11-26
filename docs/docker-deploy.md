@@ -7,13 +7,13 @@
 | 服务名 | 镜像 / 构建文件 | 端口映射 | 职责说明 |
 | :--- | :--- | :--- | :--- |
 | `mysql` | `mysql:8.4` | `3306:3306` | 业务数据库持久化，配置健康检查与持久化卷 `mysql_data` |
-| `mysql-migrate` | `mysql:8.4` | 无 | 一次性迁移服务（`restart: "no"`），在 `mysql` 健康后执行 `docker/mysql/run-migrations.sh` 按顺序运行 `backend/migrations/*.up.sql` 并记录版本至 `schema_migrations`，完成后正常退出 |
 | `redis` | `redis:7.4-alpine` | `6379:6379` | 缓存、限流与推荐召回池，开启 AOF 持久化卷 `redis_data` |
+| `minio` | `cgr.dev/chainguard/minio:latest` | `9000:9000`、`9001:9001` | S3 兼容对象存储（图片、视频与 HLS 切片），持久化卷 `minio_data`，9001 为 Web 控制台 |
 | `rmqnamesrv` | `apache/rocketmq:5.3.4` | `9876:9876` | RocketMQ NameServer，JVM 堆内存限制为 256MB |
 | `rmqbroker` | `apache/rocketmq:5.3.4` | `10911:10911`、`10909:10909` | RocketMQ Broker，挂载 `docker/rocketmq/broker.conf`，关闭自动建 Topic，JVM 堆内存限制为 512MB |
 | `rmq-topic-init` | `apache/rocketmq:5.3.4` | 无 | 一次性初始化服务（`restart: "no"`），在 `rmqbroker` 健康后执行 `docker/rocketmq/init-topics.sh` 自动创建全部业务 Topic，完成后正常退出 |
-| `backend` | `docker/backend.Dockerfile` | `8080:8080` | 单 Go 后端服务，等待 `mysql-migrate` 执行成功、Redis 健康及 `rmq-topic-init` 执行成功后启动，通过 `BILIBILI_*` 环境变量覆盖容器内连接地址 |
-| `frontend` | `docker/frontend.Dockerfile` | `8088:80` | Nginx 托管前端构建产物，挂载 `docker/nginx/default.conf` 处理 SPA 路由回退及 `/api/`、`/healthz`、`/ws/` 反向代理 |
+| `backend` | `docker/backend.Dockerfile` | `8080:8080` | 单 Go 后端服务，启动时自动连接 MySQL 执行内嵌迁移 SQL、连接 Redis、连接 MinIO 并自动创建存储桶与公开读前缀策略，通过 `BILIBILI_*` 环境变量覆盖容器内连接地址 |
+| `frontend` | `docker/frontend.Dockerfile` | `8088:80` | Nginx 托管前端构建产物，挂载 `docker/nginx/default.conf` 处理 SPA 路由回退及 `/api/`、`/healthz`、`/storage/`、`/ws/` 反向代理 |
 
 ## 2. Dockerfile 构建代理与缓存策略
 
@@ -27,8 +27,17 @@
 - 通过构建参数 `ARG NPM_REGISTRY=https://registry.npmmirror.com` 配置 npm 代理镜像源。
 - 先拷贝 `package.json` 与 `package-lock.json` 执行 `npm ci`，再拷贝源码执行 `npm run build` 产出 `dist/`。
 
-## 3. RocketMQ Topic 自动创建机制
+## 3. 自动初始化机制
 
+### 3.1 Go 启动自动数据库迁移
+- `backend/migrations/embed.go` 通过 `//go:embed *.up.sql` 将全部迁移脚本打包进 Go 二进制文件。
+- `backend` 每次启动连上 MySQL 后自动获取会话锁 `GET_LOCK('simple_bilibili_schema_migrate', 30)`，检查 `schema_migrations` 表并按版本号顺序幂等执行新增的 `.up.sql` 脚本，无需单独维护迁移容器。
+
+### 3.2 MinIO 自动建桶与 Nginx 同源代理
+- `backend` 启动连接 MinIO 时自动检查并创建目标 Bucket（默认 `bilibili`），为 `avatars/*`、`covers/*`、`hls/*` 前缀配置匿名只读策略。
+- Nginx 在 `docker/nginx/default.conf` 中将 `/storage/` 反向代理至 `http://minio:9000/bilibili/`，前端通过同源路径 `/storage/...` 直接访问对象存储资源；本地可通过 `http://127.0.0.1:9001` 访问 MinIO 控制台（默认账号 `simple_bilibili_minio`、密码 `local_minio_password`）。
+
+### 3.3 RocketMQ Topic 自动创建
 `rmqbroker` 在 `docker/rocketmq/broker.conf` 中设置 `autoCreateTopicEnable = false`，由专门的 `rmq-topic-init` 容器负责在启动链路中显式创建 Topic：
 1. `rmq-topic-init` 依赖 `rmqbroker` 健康检查通过后启动。
 2. `docker/rocketmq/init-topics.sh` 先轮询 `mqadmin clusterList` 确认 Broker 已注册到 `rmqnamesrv:9876`。
@@ -45,6 +54,9 @@ docker compose -f docker/docker-compose.yml up -d --build
 
 # 查看各容器健康状态与 Topic 初始化退出状态
 docker compose -f docker/docker-compose.yml ps -a
+
+# 查看 Go 后端启动迁移与服务日志
+docker compose -f docker/docker-compose.yml logs backend
 
 # 查看 Topic 自动创建日志
 docker compose -f docker/docker-compose.yml logs rmq-topic-init

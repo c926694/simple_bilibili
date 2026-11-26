@@ -11,6 +11,17 @@ import (
 )
 
 func Connect(ctx context.Context, cfg config.MySQL) (*sqlx.DB, error) {
+	dsn := connectionConfig(cfg)
+	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
+	defer cancel()
+	db, err := sqlx.ConnectContext(ctx, "mysql", dsn.FormatDSN())
+	if err != nil {
+		return nil, fmt.Errorf("连接 MySQL %s/%s: %w", cfg.Addr, cfg.Database, err)
+	}
+	return db, nil
+}
+
+func connectionConfig(cfg config.MySQL) *mysql.Config {
 	dsn := mysql.NewConfig()
 	dsn.User = cfg.User
 	dsn.Passwd = cfg.Password
@@ -20,11 +31,5 @@ func Connect(ctx context.Context, cfg config.MySQL) (*sqlx.DB, error) {
 	dsn.ParseTime = true
 	dsn.Timeout = cfg.ConnectTimeout
 
-	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectTimeout)
-	defer cancel()
-	db, err := sqlx.ConnectContext(ctx, "mysql", dsn.FormatDSN())
-	if err != nil {
-		return nil, fmt.Errorf("连接 MySQL %s/%s: %w", cfg.Addr, cfg.Database, err)
-	}
-	return db, nil
+	return dsn
 }

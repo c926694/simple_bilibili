@@ -4,6 +4,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 
+	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/modules/comment"
 	"simple_bilibili/backend/internal/modules/danmaku"
 	"simple_bilibili/backend/internal/modules/interaction"
@@ -27,8 +28,8 @@ type Modules struct {
 	Recommend   *recommend.Service
 }
 
-func NewModules(db *sqlx.DB, client *redis.Client, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
-	users := user.NewService(user.NewStore(db, client), tokens, ids)
+func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
+	users := user.NewService(user.NewStore(db, client), objects, tokens, ids)
 	videos := video.NewService(video.NewStore(db), users)
 
 	return Modules{

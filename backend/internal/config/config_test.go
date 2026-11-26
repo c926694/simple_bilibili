@@ -23,7 +23,7 @@ func TestLoadExample(t *testing.T) {
 	if cfg.Redis.Addr != "127.0.0.1:6379" || cfg.Redis.DB != 0 {
 		t.Errorf("Redis 地址和数据库编号: %q/%d", cfg.Redis.Addr, cfg.Redis.DB)
 	}
-	if cfg.MinIO.Bucket != "videos" || cfg.MinIO.Secure {
+	if cfg.MinIO.Bucket != "bilibili" || cfg.MinIO.Secure {
 		t.Errorf("MinIO 存储桶和 HTTPS 开关: %q/%t", cfg.MinIO.Bucket, cfg.MinIO.Secure)
 	}
 	if len(cfg.RocketMQ.NameServers) != 1 || cfg.RocketMQ.NameServers[0] != "127.0.0.1:9876" {

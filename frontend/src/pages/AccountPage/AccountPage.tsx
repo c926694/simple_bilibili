@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../api/client'
 import { userApi } from '../../api/user'
@@ -8,10 +8,13 @@ import { useAuth } from '../../context/AuthContext'
 import './AccountPage.css'
 
 type AccountTab = 'profile' | 'security'
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 export function AccountPage() {
   const { user, initializing, openAuthModal, setUser, logout } = useAuth()
   const [activeTab, setActiveTab] = useState<AccountTab>('profile')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [nickname, setNickname] = useState('')
   const [bio, setBio] = useState('')
@@ -19,6 +22,7 @@ export function AccountPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [profileNotice, setProfileNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null,
   )
@@ -42,6 +46,38 @@ export function AccountPage() {
     setEmail(user.email ?? '')
     setPhone(user.phone ?? '')
   }, [user])
+
+  const handleAvatarFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    setProfileNotice(null)
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      setProfileNotice({ type: 'error', text: '仅支持 JPG、PNG、WebP 或 GIF 格式图片' })
+      return
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setProfileNotice({ type: 'error', text: '头像文件大小不能超过 5MB' })
+      return
+    }
+
+    setUploadingAvatar(true)
+    try {
+      const updated = await userApi.uploadAvatar(file)
+      setUser(updated)
+      setAvatarUrl(updated.avatar_url)
+      setProfileNotice({ type: 'success', text: '头像已上传至对象存储并更新成功' })
+    } catch (err) {
+      setProfileNotice({
+        type: 'error',
+        text: err instanceof ApiError ? err.message : '头像上传失败，请稍后重试',
+      })
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -213,6 +249,25 @@ export function AccountPage() {
                       头像
                     </label>
                     <div className="account-field__control">
+                      <div className="avatar-upload-row">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handleAvatarFileChange}
+                          style={{ display: 'none' }}
+                          aria-label="选择本地头像文件"
+                        />
+                        <button
+                          type="button"
+                          className="avatar-upload-btn"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingAvatar}
+                        >
+                          {uploadingAvatar ? '上传中...' : '上传本地头像'}
+                        </button>
+                        <span className="avatar-upload-hint">支持 JPG / PNG / WebP / GIF，最大 5MB</span>
+                      </div>
                       <div className="avatar-presets" aria-label="预设头像">
                         {PRESET_AVATARS.map((item) => (
                           <button
@@ -232,7 +287,7 @@ export function AccountPage() {
                         id="profile-avatar"
                         type="text"
                         className="account-input"
-                        placeholder="输入头像 URL（支持 /avatars/... 或 http(s)://...）"
+                        placeholder="输入头像 URL（支持 /storage/...、/avatars/... 或 http(s)://...）"
                         value={avatarUrl}
                         onChange={(e) => setAvatarUrl(e.target.value)}
                         maxLength={512}

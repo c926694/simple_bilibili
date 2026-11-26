@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/jwt"
 	"simple_bilibili/backend/internal/pkg/password"
@@ -16,13 +17,14 @@ import (
 )
 
 type Service struct {
-	store  *Store
-	tokens *jwt.Manager
-	ids    *snowflake.Generator
+	store   *Store
+	objects *minio.Client
+	tokens  *jwt.Manager
+	ids     *snowflake.Generator
 }
 
-func NewService(store *Store, tokens *jwt.Manager, ids *snowflake.Generator) *Service {
-	return &Service{store: store, tokens: tokens, ids: ids}
+func NewService(store *Store, objects *minio.Client, tokens *jwt.Manager, ids *snowflake.Generator) *Service {
+	return &Service{store: store, objects: objects, tokens: tokens, ids: ids}
 }
 
 func (s *Service) NicknamesByIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
@@ -139,6 +141,36 @@ func (s *Service) UpdateProfile(ctx context.Context, userID int64, input profile
 		return err
 	})
 	if err != nil {
+		return profileResponse{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) UploadAvatar(ctx context.Context, userID int64, input avatarInput) (profileResponse, error) {
+	objectKey := fmt.Sprintf("avatars/%d/%d.%s", userID, s.ids.Next(), input.extension)
+	if err := s.objects.PutObject(ctx, objectKey, input.file, input.size, input.contentType); err != nil {
+		return profileResponse{}, err
+	}
+
+	var result profileResponse
+	readyToCommit := false
+	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
+		// 仅更新头像地址，在同一事务读取完整资料。
+		if err := s.store.updateAvatar(ctx, userID, "/storage/"+objectKey); err != nil {
+			return err
+		}
+		var err error
+		result, err = s.Me(ctx, userID)
+		readyToCommit = err == nil
+		return err
+	})
+	if err != nil {
+		// 提交结果不明时保留对象，避免删除已写入资料的头像。
+		if !readyToCommit {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			err = errors.Join(err, s.objects.RemoveObject(cleanupCtx, objectKey))
+		}
 		return profileResponse{}, err
 	}
 	return result, nil

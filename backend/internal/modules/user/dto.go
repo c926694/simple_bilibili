@@ -1,6 +1,7 @@
 package user
 
 import (
+	"io"
 	"time"
 
 	"simple_bilibili/backend/internal/pkg/jwt"
@@ -34,6 +35,13 @@ type profileInput struct {
 type passwordInput struct {
 	OldPassword string `json:"old_password"`
 	NewPassword string `json:"new_password"`
+}
+
+type avatarInput struct {
+	file        io.Reader
+	size        int64
+	contentType string
+	extension   string
 }
 
 type profileResponse struct {

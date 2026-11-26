@@ -50,6 +50,16 @@ export const userApi = {
     })
   },
 
+  uploadAvatar(file: File): Promise<UserProfile> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiRequest<UserProfile>('/api/v1/users/me/avatar', {
+      method: 'POST',
+      body: formData,
+      auth: true,
+    })
+  },
+
   updatePassword(req: UpdatePasswordRequest): Promise<null> {
     return apiRequest<null>('/api/v1/users/me/password', {
       method: 'PUT',

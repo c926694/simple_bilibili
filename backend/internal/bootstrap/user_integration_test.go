@@ -7,8 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
+	"io"
 	"math"
 	mathrand "math/rand/v2"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +21,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	miniogo "github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"simple_bilibili/backend/internal/config"
 	"simple_bilibili/backend/internal/pkg/jwt"
@@ -60,9 +67,13 @@ const (
 
 func TestUserAuthenticationIntegration(t *testing.T) {
 	if os.Getenv("BILIBILI_USER_INTEGRATION") != "1" {
-		t.Skip("设置 BILIBILI_USER_INTEGRATION=1，并使用 BILIBILI_USER_TEST_* 指定已执行迁移的 MySQL 测试数据库和 Redis")
+		t.Skip("设置 BILIBILI_USER_INTEGRATION=1，并使用 BILIBILI_USER_TEST_* 指定 MySQL 测试数据库、Redis 和 MinIO")
 	}
-	for _, key := range []string{"MYSQL_ADDR", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE", "REDIS_ADDR", "REDIS_USERNAME", "REDIS_PASSWORD", "REDIS_DB"} {
+	for _, key := range []string{
+		"MYSQL_ADDR", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE",
+		"REDIS_ADDR", "REDIS_USERNAME", "REDIS_PASSWORD", "REDIS_DB",
+		"MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_SECURE",
+	} {
 		if value, ok := os.LookupEnv("BILIBILI_USER_TEST_" + key); ok {
 			t.Setenv("BILIBILI_"+key, value)
 		}
@@ -75,6 +86,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 		t.Fatal("集成测试要求使用名称以 _test 结尾的 MySQL 数据库")
 	}
 	cfg.App.TrustedProxies = []string{"127.0.0.1/32"}
+	cfg.MinIO.Bucket = "bilibili-user-test-" + strings.ToLower(rand.Text())
 	app, err := New(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +96,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	cleanAvatarTestBucket(t, cfg.MinIO)
 	router, err := app.router()
 	if err != nil {
 		t.Fatal(err)
@@ -251,6 +264,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	if reset.AvatarURL != defaultAvatar {
 		t.Fatalf("清空头像后返回 %q，期望 %q", reset.AvatarURL, defaultAvatar)
 	}
+	main.verifyAvatarUpload(t, cfg.MinIO, first.Access, first.User.ID)
 
 	var rotated userTokens
 	main.call(t, http.MethodPost, authURL+"/refresh", "", refreshBody(first.Refresh), 0, &rotated)
@@ -316,6 +330,114 @@ func refreshBody(value string) map[string]string {
 	return map[string]string{"refresh_token": value}
 }
 
+func (c userIntegration) verifyAvatarUpload(t *testing.T, cfg config.MinIO, access, userID string) {
+	t.Helper()
+	var pngFile bytes.Buffer
+	if err := png.Encode(&pngFile, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+
+	c.avatarRequest(t, "", "avatar.png", pngFile.Bytes(), 10002)
+	c.avatarRequest(t, access, "", nil, 10001)
+	c.avatarRequest(t, access, "not-an-image.png", []byte("文件名和真实格式不同"), 10001)
+
+	oversized := make([]byte, (5<<20)+1)
+	copy(oversized, pngFile.Bytes())
+	c.avatarRequest(t, access, "oversized.png", oversized, 10001)
+
+	response := c.avatarRequest(t, access, "avatar.txt", pngFile.Bytes(), 0)
+	var profile integrationProfile
+	if err := json.Unmarshal(response.Data, &profile); err != nil {
+		t.Fatal(err)
+	}
+	objectKey, found := strings.CutPrefix(profile.AvatarURL, "/storage/")
+	filename, inUserFolder := strings.CutPrefix(objectKey, "avatars/"+userID+"/")
+	id, pngExtension := strings.CutSuffix(filename, ".png")
+	imageID, err := strconv.ParseInt(id, 10, 64)
+	if !found || !inUserFolder || !pngExtension || err != nil || imageID <= 0 || profile.ID != userID || profile.Username == "" {
+		t.Fatalf("上传头像返回的用户资料不符: %+v", profile)
+	}
+
+	var saved integrationProfile
+	c.call(t, http.MethodGet, usersURL+"/me", access, nil, 0, &saved)
+	if saved.AvatarURL != profile.AvatarURL {
+		t.Fatalf("数据库头像地址为 %q，上传接口返回 %q", saved.AvatarURL, profile.AvatarURL)
+	}
+
+	scheme := "http://"
+	if cfg.Secure {
+		scheme = "https://"
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, scheme+cfg.Endpoint+"/"+cfg.Bucket+"/"+objectKey, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "image/png" || !bytes.Equal(body, pngFile.Bytes()) {
+		t.Fatalf("MinIO 头像内容不符，HTTP %d", res.StatusCode)
+	}
+}
+
+func (c userIntegration) avatarRequest(t *testing.T, access, filename string, contents []byte, code int) userEnvelope {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if filename != "" {
+		part, err := writer.CreateFormFile("file", filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(contents); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	response, err := c.send(t.Context(), http.MethodPost, usersURL+"/me/avatar", access, writer.FormDataContentType(), &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != code || (code != 0 && string(response.Data) != "null") {
+		t.Fatalf("上传头像返回 %d 和 %q，期望错误码 %d", response.Code, response.Msg, code)
+	}
+	return response
+}
+
+func cleanAvatarTestBucket(t *testing.T, cfg config.MinIO) {
+	t.Helper()
+	client, err := miniogo.New(cfg.Endpoint, &miniogo.Options{
+		Creds: credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""), Secure: cfg.Secure,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for object := range client.ListObjects(ctx, cfg.Bucket, miniogo.ListObjectsOptions{Recursive: true}) {
+			if object.Err != nil {
+				t.Error(object.Err)
+				return
+			}
+			if err := client.RemoveObject(ctx, cfg.Bucket, object.Key, miniogo.RemoveObjectOptions{}); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := client.RemoveBucket(ctx, cfg.Bucket); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 func (c userIntegration) request(ctx context.Context, method, path, access string, input any) (userEnvelope, error) {
 	var body []byte
 	if input != nil {
@@ -325,11 +447,15 @@ func (c userIntegration) request(ctx context.Context, method, path, access strin
 			return userEnvelope{}, err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.url+path, bytes.NewReader(body))
+	return c.send(ctx, method, path, access, "application/json", bytes.NewReader(body))
+}
+
+func (c userIntegration) send(ctx context.Context, method, path, access, contentType string, body io.Reader) (userEnvelope, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.url+path, body)
 	if err != nil {
 		return userEnvelope{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Forwarded-For", c.ip)
 	if access != "" {
 		req.Header.Set("Authorization", "Bearer "+access)

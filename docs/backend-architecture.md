@@ -193,8 +193,9 @@ flowchart LR
 
 ## 6. 数据库迁移与本地构建命令规范
 
-### 6.1 `migrations/` 脚本规范
-- 每个迁移版本成对提供 `XXXX_description.up.sql` 与 `XXXX_description.down.sql`。
+### 6.1 `migrations/` 脚本与 Go 启动自动迁移规范
+- 每个迁移版本成对提供 `XXXX_description.up.sql` 与 `XXXX_description.down.sql`，并通过 `migrations/embed.go`（`//go:embed *.up.sql`）打包进 Go 二进制文件。
+- Go 后端服务启动连上 MySQL 后自动获取会话锁 `GET_LOCK('simple_bilibili_schema_migrate', 30)`，按版本号顺序幂等执行未应用的 `.up.sql` 脚本并写入 `schema_migrations` 表。
 - 已合入主分支的迁移脚本禁止修改，后续表结构演进必须新建更高编号的迁移文件。
 - 所有建表语句的每个字段都必须附带 `COMMENT` 业务字段说明，且严禁声明 `FOREIGN KEY` 物理外键约束。
 

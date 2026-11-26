@@ -86,4 +86,27 @@ describe('apiRequest 统一三字段协议与自动刷新', () => {
     expect(tokenStorage.getRefreshToken()).toBeNull()
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
+
+  it('发送 FormData 上传时不覆写 Content-Type 请求头', async () => {
+    tokenStorage.setTokens({ access_token: 'acc-token', refresh_token: 'ref-token' })
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        jsonResponse({ code: 0, data: { id: '1', avatar_url: '/storage/avatars/1/a.png' }, msg: 'ok' }),
+      )
+
+    const form = new FormData()
+    form.append('file', new Blob(['img'], { type: 'image/png' }), 'a.png')
+
+    const res = await apiRequest<{ id: string; avatar_url: string }>('/api/v1/users/me/avatar', {
+      method: 'POST',
+      body: form,
+    })
+
+    expect(res.avatar_url).toBe('/storage/avatars/1/a.png')
+    const init = fetchSpy.mock.calls[0][1] as RequestInit
+    expect(init.body).toBe(form)
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer acc-token')
+  })
 })

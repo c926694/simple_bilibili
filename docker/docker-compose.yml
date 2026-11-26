@@ -24,27 +24,6 @@ services:
     networks:
       - network
 
-  mysql-migrate:
-    image: mysql:8.4
-    container_name: simple_bilibili-mysql-migrate
-    restart: "no"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    command: ["sh", "/run-migrations.sh"]
-    environment:
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: ${MYSQL_USER:-simple_bilibili}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_mysql_password}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-simple_bilibili}
-      MIGRATIONS_DIR: /migrations
-    volumes:
-      - ./mysql/run-migrations.sh:/run-migrations.sh:ro
-      - ../backend/migrations:/migrations:ro
-    networks:
-      - network
-
   redis:
     image: redis:7.4-alpine
     container_name: simple_bilibili-redis
@@ -59,6 +38,34 @@ services:
       interval: 5s
       timeout: 3s
       retries: 15
+    networks:
+      - network
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: simple_bilibili-minio
+    user: "0:0"
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-simple_bilibili_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local_minio_password}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf \"GET /minio/health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && IFS= read -r line <&3 && [[ \"$$line\" == *\"200\"* ]]'",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
     networks:
       - network
 
@@ -142,9 +149,11 @@ services:
     container_name: simple_bilibili-backend
     restart: unless-stopped
     depends_on:
-      mysql-migrate:
-        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
       rmq-topic-init:
         condition: service_completed_successfully
@@ -157,6 +166,11 @@ services:
       BILIBILI_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_mysql_password}
       BILIBILI_MYSQL_DATABASE: ${MYSQL_DATABASE:-simple_bilibili}
       BILIBILI_REDIS_ADDR: redis:6379
+      BILIBILI_MINIO_ENDPOINT: minio:9000
+      BILIBILI_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-simple_bilibili_minio}
+      BILIBILI_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-local_minio_password}
+      BILIBILI_MINIO_BUCKET: ${MINIO_BUCKET:-bilibili}
+      BILIBILI_MINIO_SECURE: "false"
       BILIBILI_ROCKETMQ_NAME_SERVERS: rmqnamesrv:9876
       BILIBILI_JWT_SECRET: ${JWT_SECRET:-docker_dev_jwt_secret_please_replace_in_prod}
     ports:
@@ -197,6 +211,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  minio_data:
   rmqbroker_store:
 
 networks:

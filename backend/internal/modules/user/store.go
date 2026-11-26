@@ -118,6 +118,14 @@ func (s *Store) updateProfile(ctx context.Context, userID int64, input profileIn
 	return nil
 }
 
+func (s *Store) updateAvatar(ctx context.Context, userID int64, url string) error {
+	_, err := tx.Executor(ctx, s.db).ExecContext(ctx, "UPDATE user SET avatar_url = ? WHERE id = ?", url, userID)
+	if err != nil {
+		return fmt.Errorf("更新头像地址: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) passwordForUpdate(ctx context.Context, userID int64) (string, error) {
 	var hash string
 	err := sqlx.GetContext(ctx, tx.Executor(ctx, s.db), &hash, "SELECT password_hash FROM user WHERE id = ? FOR UPDATE", userID)
