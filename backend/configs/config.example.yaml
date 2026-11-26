@@ -1,0 +1,41 @@
+# 环境变量使用 BILIBILI_ 前缀，分组与字段名之间使用下划线。
+# 例如 BILIBILI_APP_HTTP_ADDR 和 BILIBILI_JWT_SECRET。
+app:
+  mode: debug                 # Gin 运行模式，可选 debug、release、test
+  http_addr: "127.0.0.1:8080" # HTTP 监听地址
+  shutdown_timeout: 10s       # 进程退出时等待连接关闭的时限
+
+mysql:
+  addr: "127.0.0.1:3306"     # MySQL 主机与端口
+  user: simple_bilibili
+  password: local_mysql_password
+  database: simple_bilibili
+  connect_timeout: 5s        # MySQL 连接与启动探测的时限
+
+redis:
+  addr: "127.0.0.1:6379"     # Redis 主机与端口
+  username: ""               # 默认用户可留空
+  password: ""               # 本地无密码时可留空
+  db: 0                      # Redis 逻辑数据库编号
+
+minio:
+  endpoint: "127.0.0.1:9000" # MinIO 主机与端口
+  access_key: local_minio_access
+  secret_key: local_minio_secret
+  bucket: videos
+  secure: false              # 是否使用 HTTPS
+
+rocketmq:
+  name_servers:              # 环境变量使用逗号分隔多个地址
+    - "127.0.0.1:9876"
+
+jwt:
+  issuer: simple_bilibili
+  secret: local_dev_example_jwt_secret_replace_before_use
+  access_ttl: 15m
+  refresh_ttl: 168h
+
+ffmpeg:
+  binary: ffmpeg              # 可执行文件名或绝对路径
+  probe_binary: ffprobe       # 可执行文件名或绝对路径
+  work_dir: ./bin/transcode   # 转码中间文件目录
