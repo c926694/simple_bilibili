@@ -21,7 +21,7 @@ describe('AuthModal 登录注册弹窗交互', () => {
     localStorage.clear()
   })
 
-  it('支持登录与注册页签切换及入口表单校验', async () => {
+  it('支持登录与注册页签切换及空输入校验', async () => {
     render(
       <AuthProvider>
         <ModalHost />
@@ -35,14 +35,11 @@ describe('AuthModal 登录注册弹窗交互', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('请输入用户名、邮箱或手机号')
 
     fireEvent.click(screen.getByRole('button', { name: '注册账号' }))
-    fireEvent.change(screen.getByPlaceholderText('3~32位字母、数字或下划线'), {
-      target: { value: 'ab' },
-    })
     fireEvent.click(screen.getByRole('button', { name: '立即注册' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('用户名需为 3~32 位字母、数字或下划线')
+    expect(await screen.findByRole('alert')).toHaveTextContent('请输入用户名')
   })
 
-  it('允许任意非空简单密码直接提交注册请求', async () => {
+  it('允许任意非空用户名与简单密码直接提交注册请求', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -54,8 +51,8 @@ describe('AuthModal 登录注册弹窗交互', () => {
             refresh_expires_in: 604800,
             user: {
               id: '101',
-              username: 'simple_user',
-              nickname: 'simple_user',
+              username: '小电视!@#',
+              nickname: '小电视!@#',
               email: null,
               phone: null,
               avatar_url: '/avatars/default.webp',
@@ -80,8 +77,8 @@ describe('AuthModal 登录注册弹窗交互', () => {
 
     fireEvent.click(screen.getByText('打开登录窗'))
     fireEvent.click(screen.getByRole('button', { name: '注册账号' }))
-    fireEvent.change(screen.getByPlaceholderText('3~32位字母、数字或下划线'), {
-      target: { value: 'simple_user' },
+    fireEvent.change(screen.getByPlaceholderText('请输入用户名'), {
+      target: { value: '小电视!@#' },
     })
     fireEvent.change(screen.getByPlaceholderText('请输入密码'), { target: { value: '1' } })
     fireEvent.change(screen.getByPlaceholderText('请再次输入密码'), { target: { value: '1' } })

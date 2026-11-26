@@ -114,13 +114,17 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	duplicate.ip = base + "::2"
 	limited := main
 	limited.ip = base + "::3"
+	acceptedNames := main
+	acceptedNames.ip = base + "::4"
+	rejectedNames := main
+	rejectedNames.ip = base + "::5"
 	prefix := "it_" + hex.EncodeToString(seed[:])
 	primaryPhone := fmt.Sprintf("13%09d", mathrand.Uint64N(1_000_000_000))
 	secondaryPhone := "14" + primaryPhone[2:]
 	primaryName, secondaryName, optionalName := prefix+"_one", primaryPhone, prefix+"_optional"
 	var testUserIDs []string
 	var redisKeys []string
-	for _, ip := range []string{main.ip, duplicate.ip, limited.ip} {
+	for _, ip := range []string{main.ip, duplicate.ip, limited.ip, acceptedNames.ip, rejectedNames.ip} {
 		redisKeys = append(redisKeys, "rate:auth:register:"+ip, "rate:auth:login:"+ip)
 	}
 	t.Cleanup(func() {
@@ -324,6 +328,70 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 		}
 		limited.call(t, http.MethodPost, path.url, "", map[string]string{}, 10005, nil)
 	}
+	t.Run("用户名与昵称边界", func(t *testing.T) {
+		verifyRegistrationNames(t, acceptedNames, rejectedNames, trackUser)
+	})
+}
+
+func verifyRegistrationNames(t *testing.T, accepted, rejected userIntegration, trackUser func(string)) {
+	t.Helper()
+	const password = "1"
+	atLimit := strings.Repeat("界", 63) + "🚀"
+	for _, tc := range []struct {
+		input    string
+		username string
+		nickname string
+	}{
+		{input: "测", username: "测"},
+		{input: "\t小电视!@#\u3000", username: "小电视!@#"},
+		{input: atLimit, username: atLimit},
+		{input: "任意 用户名🌟", username: "任意 用户名🌟", nickname: atLimit},
+	} {
+		t.Run(tc.username, func(t *testing.T) {
+			wantNickname := tc.nickname
+			if wantNickname == "" {
+				wantNickname = tc.username
+			}
+			var registered struct {
+				User integrationProfile `json:"user"`
+			}
+			accepted.call(t, http.MethodPost, authURL+"/register", "", map[string]string{
+				"username": tc.input, "nickname": tc.nickname, "password": password,
+			}, 0, &registered)
+			trackUser(registered.User.ID)
+			if registered.User.Username != tc.username || registered.User.Nickname != wantNickname {
+				t.Fatalf("注册返回的用户名或昵称不符: %+v", registered.User)
+			}
+			var login userTokens
+			accepted.call(t, http.MethodPost, authURL+"/login", "", map[string]string{
+				"account": tc.input, "password": password,
+			}, 0, &login)
+			var profile integrationProfile
+			accepted.call(t, http.MethodGet, usersURL+"/me", login.Access, nil, 0, &profile)
+			if profile.ID != registered.User.ID || profile.Username != tc.username || profile.Nickname != wantNickname {
+				t.Fatalf("登录后读取的资料不符: %+v", profile)
+			}
+			if tc.username == atLimit {
+				accepted.call(t, http.MethodPut, usersURL+"/me", login.Access, map[string]string{
+					"nickname": atLimit,
+				}, 0, &profile)
+				if profile.Nickname != atLimit {
+					t.Fatalf("更新后昵称不符: %q", profile.Nickname)
+				}
+			}
+		})
+	}
+	accepted.call(t, http.MethodPost, authURL+"/register", "", map[string]string{
+		"username": "\u3000测 ", "password": password,
+	}, 11001, nil)
+	for _, username := range []string{"", "\t\u3000", atLimit + "界"} {
+		rejected.call(t, http.MethodPost, authURL+"/register", "", map[string]string{
+			"username": username, "password": password,
+		}, 10001, nil)
+	}
+	rejected.call(t, http.MethodPost, authURL+"/register", "", map[string]string{
+		"username": "昵称超长校验", "nickname": atLimit + "界", "password": password,
+	}, 10001, nil)
 }
 
 func refreshBody(value string) map[string]string {

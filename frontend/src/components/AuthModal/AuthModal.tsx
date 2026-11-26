@@ -3,8 +3,6 @@ import { ApiError } from '../../api/client'
 import { useAuth, type AuthModalTab } from '../../context/AuthContext'
 import './AuthModal.css'
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,32}$/
-
 export function AuthModal() {
   const { isAuthModalOpen, authModalTab, closeAuthModal, login, register } = useAuth()
   const [tab, setTab] = useState<AuthModalTab>(authModalTab)
@@ -68,8 +66,12 @@ export function AuthModal() {
     event.preventDefault()
     setErrorMsg('')
     const trimmedUsername = username.trim()
-    if (!USERNAME_PATTERN.test(trimmedUsername)) {
-      setErrorMsg('用户名需为 3~32 位字母、数字或下划线')
+    if (!trimmedUsername) {
+      setErrorMsg('请输入用户名')
+      return
+    }
+    if ([...trimmedUsername].length > 64) {
+      setErrorMsg('用户名长度不能超过 64 个字符')
       return
     }
     if (!registerPassword) {
@@ -232,7 +234,7 @@ export function AuthModal() {
                 <input
                   type="text"
                   className="auth-form__input"
-                  placeholder="3~32位字母、数字或下划线"
+                  placeholder="请输入用户名"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   autoComplete="username"

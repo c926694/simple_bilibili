@@ -84,8 +84,8 @@ export function AccountPage() {
     setProfileNotice(null)
 
     const trimmedNickname = nickname.trim()
-    if (!trimmedNickname || trimmedNickname.length > 32) {
-      setProfileNotice({ type: 'error', text: '昵称长度需在 1~32 个字符之间' })
+    if (!trimmedNickname || [...trimmedNickname].length > 64) {
+      setProfileNotice({ type: 'error', text: '昵称长度需在 1~64 个字符之间' })
       return
     }
     if (bio.trim().length > 200) {
@@ -239,7 +239,7 @@ export function AccountPage() {
                         className="account-input"
                         value={nickname}
                         onChange={(e) => setNickname(e.target.value)}
-                        maxLength={32}
+                        maxLength={64}
                       />
                     </div>
                   </div>

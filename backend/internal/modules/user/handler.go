@@ -17,10 +17,12 @@ import (
 	"simple_bilibili/backend/internal/pkg/response"
 )
 
-var (
-	usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{3,32}$`)
-	phonePattern    = regexp.MustCompile(`^[0-9]{7,15}$`)
+const (
+	maxUsernameLength = 64
+	maxNicknameLength = 64
 )
+
+var phonePattern = regexp.MustCompile(`^[0-9]{7,15}$`)
 
 type Handler struct {
 	service *Service
@@ -33,8 +35,13 @@ func NewHandler(service *Service, logger *slog.Logger) *Handler {
 
 func (h *Handler) register(c *gin.Context) {
 	var input registerInput
-	if err := c.ShouldBindJSON(&input); err != nil || !usernamePattern.MatchString(input.Username) ||
-		input.Password == "" || utf8.RuneCountInString(input.Nickname) > 32 ||
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Fail(c, errcode.InvalidParams, "")
+		return
+	}
+	input.Username = strings.TrimSpace(input.Username)
+	if input.Username == "" || utf8.RuneCountInString(input.Username) > maxUsernameLength ||
+		input.Password == "" || utf8.RuneCountInString(input.Nickname) > maxNicknameLength ||
 		!validContact(input.Email, input.Phone) {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
@@ -49,7 +56,12 @@ func (h *Handler) register(c *gin.Context) {
 
 func (h *Handler) login(c *gin.Context) {
 	var input loginInput
-	if err := c.ShouldBindJSON(&input); err != nil || input.Account == "" || input.Password == "" {
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Fail(c, errcode.InvalidParams, "")
+		return
+	}
+	input.Account = strings.TrimSpace(input.Account)
+	if input.Account == "" || input.Password == "" {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
 	}
@@ -85,7 +97,7 @@ func (h *Handler) me(c *gin.Context) {
 func (h *Handler) updateProfile(c *gin.Context) {
 	var input profileInput
 	if err := c.ShouldBindJSON(&input); err != nil || input.Nickname == "" ||
-		utf8.RuneCountInString(input.Nickname) > 32 || utf8.RuneCountInString(input.Bio) > 200 ||
+		utf8.RuneCountInString(input.Nickname) > maxNicknameLength || utf8.RuneCountInString(input.Bio) > 200 ||
 		!validAvatar(input.AvatarURL) || !validContact(input.Email, input.Phone) {
 		response.Fail(c, errcode.InvalidParams, "")
 		return
