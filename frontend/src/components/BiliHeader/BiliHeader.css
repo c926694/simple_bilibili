@@ -281,6 +281,27 @@
   font-weight: 500;
 }
 
+.bili-checkin-pill {
+  margin-top: 10px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bili-checkin-pill:hover:not(:disabled) {
+  background: var(--bili-pink-hover);
+}
+
+.bili-checkin-pill--done {
+  background: var(--bili-bg-soft);
+  color: var(--bili-text-3);
+  cursor: default;
+}
+
 .bili-guest-card__link:hover {
   text-decoration: underline;
 }

@@ -45,8 +45,8 @@ func TestMigrateIntegration(t *testing.T) {
 	}
 	tables := []string{
 		"category", "coin_ledger", "comment", "comment_reaction", "danmaku", "danmaku_stat_outbox", "dynamic_inbox", "dynamic_post",
-		"favorite_folder", "favorite_item", "home_banner", "notification", "schema_migrations", "tag", "upload_task",
-		"user", "user_follow", "user_video_behavior", "video", "video_interaction", "video_part", "video_stat",
+		"favorite_folder", "favorite_item", "home_banner", "interaction_stat_outbox", "notification", "schema_migrations", "tag", "upload_task",
+		"user", "user_checkin", "user_follow", "user_video_behavior", "video", "video_interaction", "video_part", "video_stat",
 		"video_stat_event", "video_tag", "watch_history",
 	}
 	t.Cleanup(func() {
@@ -83,8 +83,8 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &comments, "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"); err != nil {
 		t.Fatal(err)
 	}
-	if len(comments) != 186 {
-		t.Fatalf("迁移生成了 %d 个字段，期望 186 个", len(comments))
+	if len(comments) != 198 {
+		t.Fatalf("迁移生成了 %d 个字段，期望 198 个", len(comments))
 	}
 	for _, comment := range comments {
 		if !strings.ContainsFunc(comment, func(r rune) bool { return unicode.Is(unicode.Han, r) }) {
@@ -96,7 +96,7 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &applied, "SELECT version FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql", "0004_danmaku_stat_delivery.up.sql"}
+	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql", "0004_danmaku_stat_delivery.up.sql", "0005_interaction_checkin_outbox.up.sql"}
 	if !slices.Equal(applied, versions) {
 		t.Fatalf("迁移版本为 %v", applied)
 	}

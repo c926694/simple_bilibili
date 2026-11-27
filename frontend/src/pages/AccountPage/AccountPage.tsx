@@ -4,6 +4,7 @@ import { ApiError } from '../../api/client'
 import { uploadApi } from '../../api/upload'
 import { userApi } from '../../api/user'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
+import { CheckinPanel } from '../../components/CheckinPanel/CheckinPanel'
 import { PRESET_AVATARS, UserAvatar } from '../../components/UserAvatar/UserAvatar'
 import { useAuth } from '../../context/AuthContext'
 import './AccountPage.css'
@@ -262,6 +263,8 @@ export function AccountPage() {
                     </div>
                   </div>
                 </div>
+
+                <CheckinPanel />
 
                 <form className="account-form" onSubmit={handleProfileSubmit} noValidate>
                   <div className="account-field">

@@ -1,0 +1,87 @@
+.checkin-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid var(--bili-border-light);
+  padding: 20px 24px;
+  margin-bottom: 18px;
+}
+
+.checkin-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.checkin-card__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.checkin-card__sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--bili-text-2);
+}
+
+.checkin-card__btn {
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.checkin-card__btn:hover:not(:disabled) {
+  background: var(--bili-pink-hover);
+}
+
+.checkin-card__btn--done {
+  background: var(--bili-bg-soft);
+  color: var(--bili-text-3);
+  cursor: default;
+}
+
+.checkin-card__notice {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #e6f7ff;
+  color: #0369a1;
+  font-size: 13px;
+}
+
+.checkin-calendar {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.checkin-day {
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bili-bg-soft);
+  color: var(--bili-text-3);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkin-day--checked {
+  background: linear-gradient(135deg, #00aeec 0%, #fb7299 100%);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .checkin-calendar {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}

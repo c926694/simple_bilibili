@@ -22,6 +22,9 @@ const SpacePage = lazy(() =>
 const UploadPage = lazy(() =>
   import('./pages/UploadPage/UploadPage').then((m) => ({ default: m.UploadPage })),
 )
+const HistoryPage = lazy(() =>
+  import('./pages/HistoryPage/HistoryPage').then((m) => ({ default: m.HistoryPage })),
+)
 
 export default function App() {
   return (
@@ -37,6 +40,7 @@ export default function App() {
               <Route path="/account" element={<AccountPage />} />
               <Route path="/space/:id" element={<SpacePage />} />
               <Route path="/upload" element={<UploadPage />} />
+              <Route path="/history" element={<HistoryPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

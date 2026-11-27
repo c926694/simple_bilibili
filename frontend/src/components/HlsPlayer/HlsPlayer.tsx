@@ -21,6 +21,7 @@ interface HlsPlayerProps {
   onTimeChange?: (timeMs: number) => void
   onPlayStateChange?: (playing: boolean) => void
   onRateChange?: (rate: number) => void
+  seekRequest?: { timeSec: number; nonce: number } | null
   overlay?: ReactNode
   footer?: ReactNode
 }
@@ -34,6 +35,7 @@ export function HlsPlayer({
   onTimeChange,
   onPlayStateChange,
   onRateChange,
+  seekRequest,
   overlay,
   footer,
 }: HlsPlayerProps) {
@@ -157,6 +159,24 @@ export function HlsPlayer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeQuality?.url])
+
+  const pendingSeekSecRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!seekRequest) {
+      return
+    }
+    const targetSec = Math.max(0, seekRequest.timeSec)
+    const videoEl = videoRef.current
+    if (videoEl && videoEl.readyState >= 1) {
+      videoEl.currentTime = targetSec
+      setCurrentTime(targetSec)
+      onTimeChange?.(Math.round(targetSec * 1000))
+      pendingSeekSecRef.current = null
+    } else {
+      pendingSeekSecRef.current = targetSec
+    }
+  }, [seekRequest, onTimeChange])
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -309,6 +329,18 @@ export function HlsPlayer({
             onLoadedMetadata={(e) => {
               if (Number.isFinite(e.currentTarget.duration)) {
                 setDuration(e.currentTarget.duration)
+              }
+              if (pendingSeekSecRef.current !== null) {
+                const target = Math.min(
+                  pendingSeekSecRef.current,
+                  Number.isFinite(e.currentTarget.duration)
+                    ? Math.max(0, e.currentTarget.duration - 0.5)
+                    : pendingSeekSecRef.current,
+                )
+                e.currentTarget.currentTime = target
+                setCurrentTime(target)
+                onTimeChange?.(Math.round(target * 1000))
+                pendingSeekSecRef.current = null
               }
             }}
           />

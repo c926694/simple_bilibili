@@ -43,7 +43,7 @@ func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, publis
 		Upload:      uploads,
 		Danmaku:     danmaku.NewService(videos, danmaku.NewStore(db, client), hub, publisher, ids, logger),
 		Comment:     comment.NewService(users, videos),
-		Interaction: interaction.NewService(users, videos),
+		Interaction: interaction.NewService(users, videos, interaction.NewStore(db, client), publisher, ids, logger),
 		Social:      social.NewService(users, videos),
 		Recommend:   recommend.NewService(users, videos),
 	}

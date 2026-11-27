@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { interactionApi } from '../../api/interaction'
 import { useAuth } from '../../context/AuthContext'
 import { UserAvatar } from '../UserAvatar/UserAvatar'
 import './BiliHeader.css'
@@ -11,11 +12,48 @@ interface BiliHeaderProps {
 }
 
 export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
-  const { user, openAuthModal, logout } = useAuth()
+  const { user, setUser, openAuthModal, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [keyword, setKeyword] = useState('')
+  const [checkedInToday, setCheckedInToday] = useState(false)
+  const [checkinBusy, setCheckinBusy] = useState(false)
+
+  useEffect(() => {
+    if (!user) {
+      setCheckedInToday(false)
+      return
+    }
+    let cancelled = false
+    interactionApi
+      .getCheckinStatus()
+      .then((res) => {
+        if (!cancelled) {
+          setCheckedInToday(res.checked_in_today)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
+  const handleQuickCheckin = async () => {
+    if (!user || checkedInToday || checkinBusy) {
+      return
+    }
+    setCheckinBusy(true)
+    try {
+      const res = await interactionApi.checkin()
+      setCheckedInToday(true)
+      setUser({ ...user, coin_balance: res.coin_balance })
+    } catch {
+      // 已签到或异常由用户中心页详细提示
+    } finally {
+      setCheckinBusy(false)
+    }
+  }
 
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('q')
@@ -120,6 +158,14 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
                       <span>UID: {user.id}</span>
                       <span className="bili-profile-card__coin">代币 {user.coin_balance}</span>
                     </div>
+                    <button
+                      type="button"
+                      className={`bili-checkin-pill ${checkedInToday ? 'bili-checkin-pill--done' : ''}`}
+                      disabled={checkedInToday || checkinBusy}
+                      onClick={() => void handleQuickCheckin()}
+                    >
+                      {checkedInToday ? '今日已签到' : checkinBusy ? '签到中...' : '每日签到 +1 代币'}
+                    </button>
                   </div>
                   <div className="bili-profile-card__stats">
                     <Link to={`/space/${user.id}`}>
@@ -214,7 +260,7 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
           <button
             type="button"
             className="bili-icon-entry bili-icon-entry--secondary"
-            onClick={() => (user ? navigate('/account') : openAuthModal('login'))}
+            onClick={() => (user ? navigate(`/space/${user.id}?tab=favorites`) : openAuthModal('login'))}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -230,7 +276,7 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
           <button
             type="button"
             className="bili-icon-entry bili-icon-entry--secondary"
-            onClick={() => (user ? navigate(`/space/${user.id}`) : openAuthModal('login'))}
+            onClick={() => (user ? navigate('/history') : openAuthModal('login'))}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />

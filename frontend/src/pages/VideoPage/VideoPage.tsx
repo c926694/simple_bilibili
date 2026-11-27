@@ -2,19 +2,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, tokenStorage } from '../../api/client'
 import { buildVideoRoomWsUrl, DANMAKU_SEGMENT_MS, danmakuApi } from '../../api/danmaku'
+import { interactionApi } from '../../api/interaction'
 import { videoApi } from '../../api/video'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
 import { DanmakuBar } from '../../components/DanmakuBar/DanmakuBar'
 import { DanmakuLayer } from '../../components/DanmakuLayer/DanmakuLayer'
 import { HlsPlayer } from '../../components/HlsPlayer/HlsPlayer'
 import { UserAvatar } from '../../components/UserAvatar/UserAvatar'
+import { VideoActionBar } from '../../components/VideoActionBar/VideoActionBar'
 import { useAuth } from '../../context/AuthContext'
 import type {
   DanmakuItem,
   DanmakuStyleConfig,
   VideoRoomWsMessage,
 } from '../../types/danmaku'
-import type { VideoDetail, VideoSummary } from '../../types/video'
+import type { VideoInteractionState } from '../../types/interaction'
+import type { VideoDetail, VideoStat, VideoSummary } from '../../types/video'
 import {
   formatCount,
   formatDateShort,
@@ -23,6 +26,15 @@ import {
   getVideoStatusMeta,
 } from '../../utils/format'
 import './VideoPage.css'
+
+const EMPTY_INTERACTION: VideoInteractionState = {
+  liked: false,
+  coin_count: 0,
+  favorited: false,
+  favorite_folder_ids: [],
+  coin_balance: 0,
+  watch_progress: null,
+}
 
 function mergeDanmakuItems(prev: DanmakuItem[], incoming: DanmakuItem[]): DanmakuItem[] {
   const byId = new Map<string, DanmakuItem>()
@@ -44,7 +56,7 @@ function mergeDanmakuItems(prev: DanmakuItem[], incoming: DanmakuItem[]): Danmak
 export function VideoPage() {
   const { bvid } = useParams<{ bvid: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user, openAuthModal } = useAuth()
+  const { user, setUser, openAuthModal } = useAuth()
 
   const [video, setVideo] = useState<VideoDetail | null>(null)
   const [related, setRelated] = useState<VideoSummary[]>([])
@@ -52,6 +64,13 @@ export function VideoPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
+
+  // 互动与断点续播状态
+  const [interaction, setInteraction] = useState<VideoInteractionState>(EMPTY_INTERACTION)
+  const [seekRequest, setSeekRequest] = useState<{ timeSec: number; nonce: number } | null>(null)
+  const [resumeBanner, setResumeBanner] = useState<{ partIndex: number; progressSec: number } | null>(
+    null,
+  )
 
   // 播放器状态与弹幕状态
   const [playerTimeMs, setPlayerTimeMs] = useState(0)
@@ -74,6 +93,14 @@ export function VideoPage() {
   const loadedSegmentsRef = useRef<Set<number>>(new Set())
   const segmentDurationRef = useRef<number>(DANMAKU_SEGMENT_MS)
   const activePartIdRef = useRef<string>('')
+  const playerTimeMsRef = useRef<number>(0)
+  const playReportedBvidRef = useRef<string>('')
+  const resumeAppliedBvidRef = useRef<string>('')
+  const lastReportedProgressRef = useRef<{ partId: string; sec: number }>({ partId: '', sec: -1 })
+
+  useEffect(() => {
+    playerTimeMsRef.current = playerTimeMs
+  }, [playerTimeMs])
 
   const loadDetail = useCallback(async () => {
     if (!bvid) {
@@ -95,6 +122,11 @@ export function VideoPage() {
 
   useEffect(() => {
     setLoading(true)
+    setResumeBanner(null)
+    setSeekRequest(null)
+    resumeAppliedBvidRef.current = ''
+    playReportedBvidRef.current = ''
+    lastReportedProgressRef.current = { partId: '', sec: -1 }
     void loadDetail()
   }, [loadDetail])
 
@@ -108,6 +140,55 @@ export function VideoPage() {
     }, 3000)
     return () => window.clearInterval(timer)
   }, [video, loadDetail])
+
+  // 加载登录用户对该视频的互动状态与断点续播位置
+  useEffect(() => {
+    if (!video || video.status !== 3 || !user) {
+      setInteraction({ ...EMPTY_INTERACTION, coin_balance: user?.coin_balance ?? 0 })
+      return
+    }
+    let cancelled = false
+    interactionApi
+      .getVideoInteraction(video.bv_id)
+      .then((state) => {
+        if (cancelled) {
+          return
+        }
+        setInteraction(state)
+        if (state.coin_balance !== user.coin_balance) {
+          setUser({ ...user, coin_balance: state.coin_balance })
+        }
+
+        // URL 明确传了 t 参数时优先按 URL 跳转；否则按历史记录断点续播
+        if (resumeAppliedBvidRef.current === video.bv_id) {
+          return
+        }
+        resumeAppliedBvidRef.current = video.bv_id
+        const queryTime = Number(searchParams.get('t') || '0')
+        if (queryTime > 0) {
+          setSeekRequest({ timeSec: queryTime, nonce: Date.now() })
+          setResumeBanner({
+            partIndex: Number(searchParams.get('p') || '1'),
+            progressSec: queryTime,
+          })
+          return
+        }
+        const wp = state.watch_progress
+        if (wp && wp.progress_sec > 3) {
+          const targetPartIndex = wp.part_index || 1
+          if (Number(searchParams.get('p') || '1') !== targetPartIndex && !searchParams.get('p')) {
+            setSearchParams({ p: String(targetPartIndex) }, { replace: true })
+          }
+          setSeekRequest({ timeSec: wp.progress_sec, nonce: Date.now() })
+          setResumeBanner({ partIndex: targetPartIndex, progressSec: wp.progress_sec })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video?.bv_id, video?.status, user?.id])
 
   // 加载同分区相关视频
   useEffect(() => {
@@ -148,6 +229,79 @@ export function VideoPage() {
   useEffect(() => {
     activePartIdRef.current = activePart?.id ?? ''
   }, [activePart?.id])
+
+  // 播放量上报：进入已发布视频并开始播放（或首进已发布视频页面）上报一次
+  useEffect(() => {
+    if (!video || video.status !== 3) {
+      return
+    }
+    if (playReportedBvidRef.current === video.bv_id) {
+      return
+    }
+    playReportedBvidRef.current = video.bv_id
+    interactionApi
+      .reportPlay(video.bv_id)
+      .then((res) => {
+        if (res.counted) {
+          setVideo((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  stat: {
+                    ...prev.stat,
+                    play_count: (prev.stat?.play_count ?? 0) + 1,
+                  },
+                }
+              : prev,
+          )
+        }
+      })
+      .catch(() => {})
+  }, [video?.bv_id, video?.status])
+
+  const flushProgress = useCallback(
+    (force = false) => {
+      if (!user || !video || video.status !== 3 || !activePart) {
+        return
+      }
+      const sec = Math.max(0, Math.floor(playerTimeMsRef.current / 1000))
+      const prev = lastReportedProgressRef.current
+      if (!force && prev.partId === activePart.id && prev.sec === sec) {
+        return
+      }
+      lastReportedProgressRef.current = { partId: activePart.id, sec }
+      void interactionApi.reportProgress(video.bv_id, activePart.id, sec).catch(() => {})
+    },
+    [user, video, activePart],
+  )
+
+  // 播放期间每 5 秒上报一次观看进度
+  useEffect(() => {
+    if (!user || !video || video.status !== 3 || !activePart || !playerPlaying) {
+      return
+    }
+    flushProgress(false)
+    const timer = window.setInterval(() => {
+      flushProgress(false)
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [user, video, activePart, playerPlaying, flushProgress])
+
+  // 暂停或离开页面时补报一次当前进度
+  useEffect(() => {
+    if (!user || !video || video.status !== 3 || !activePart) {
+      return
+    }
+    if (!playerPlaying && playerTimeMsRef.current > 0) {
+      flushProgress(false)
+    }
+  }, [playerPlaying, user, video, activePart, flushProgress])
+
+  useEffect(() => {
+    return () => {
+      flushProgress(false)
+    }
+  }, [flushProgress])
 
   const loadSegment = useCallback(
     async (targetBvid: string, partId: string, segment: number) => {
@@ -202,7 +356,14 @@ export function VideoPage() {
     if (remainInSegment <= 20000 && (currentSegment + 1) * segMs < totalMs) {
       void loadSegment(video.bv_id, activePart.id, currentSegment + 1)
     }
-  }, [video?.bv_id, video?.status, activePart?.id, activePart?.duration_sec, playerTimeMs, loadSegment])
+  }, [
+    video?.bv_id,
+    video?.status,
+    activePart?.id,
+    activePart?.duration_sec,
+    playerTimeMs,
+    loadSegment,
+  ])
 
   // 建立视频房间 WebSocket 长连接（含心跳与断线重连）
   useEffect(() => {
@@ -278,7 +439,10 @@ export function VideoPage() {
     return () => {
       closedByEffect = true
       clearTimers()
-      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      if (
+        socket &&
+        (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+      ) {
         socket.close()
       }
     }
@@ -287,6 +451,35 @@ export function VideoPage() {
   const handleConsumeLive = useCallback(() => {
     setLiveQueue([])
   }, [])
+
+  const handleStatDelta = useCallback((delta: Partial<VideoStat>) => {
+    setVideo((prev) => {
+      if (!prev) {
+        return prev
+      }
+      return {
+        ...prev,
+        stat: {
+          play_count: Math.max(0, (prev.stat.play_count ?? 0) + (delta.play_count ?? 0)),
+          danmaku_count: Math.max(0, (prev.stat.danmaku_count ?? 0) + (delta.danmaku_count ?? 0)),
+          like_count: Math.max(0, (prev.stat.like_count ?? 0) + (delta.like_count ?? 0)),
+          coin_count: Math.max(0, (prev.stat.coin_count ?? 0) + (delta.coin_count ?? 0)),
+          favorite_count: Math.max(0, (prev.stat.favorite_count ?? 0) + (delta.favorite_count ?? 0)),
+          share_count: Math.max(0, (prev.stat.share_count ?? 0) + (delta.share_count ?? 0)),
+          comment_count: Math.max(0, (prev.stat.comment_count ?? 0) + (delta.comment_count ?? 0)),
+        },
+      }
+    })
+  }, [])
+
+  const handleCoinBalanceChange = useCallback(
+    (balance: number) => {
+      if (user) {
+        setUser({ ...user, coin_balance: balance })
+      }
+    },
+    [user, setUser],
+  )
 
   const handleSendDanmaku = async (content: string): Promise<boolean> => {
     if (!video || !activePart) {
@@ -306,17 +499,7 @@ export function VideoPage() {
       const selfItem: DanmakuItem = { ...created, isSelf: true }
       setDanmakuItems((prev) => mergeDanmakuItems(prev, [selfItem]))
       setLiveQueue((prev) => [...prev, selfItem])
-      setVideo((prev) =>
-        prev
-          ? {
-              ...prev,
-              stat: {
-                ...prev.stat,
-                danmaku_count: (prev.stat?.danmaku_count ?? 0) + 1,
-              },
-            }
-          : prev,
-      )
+      handleStatDelta({ danmaku_count: 1 })
       return true
     } catch (err) {
       setDanmakuError(err instanceof ApiError ? err.message : '发送弹幕失败，请稍后重试')
@@ -329,6 +512,8 @@ export function VideoPage() {
   const isAuthor = Boolean(user && video && user.id === video.author.id)
 
   const handleSelectPart = (partIndex: number) => {
+    flushProgress(false)
+    setResumeBanner(null)
     setSearchParams({ p: String(partIndex) })
   }
 
@@ -404,6 +589,31 @@ export function VideoPage() {
                 </div>
               </div>
 
+              {resumeBanner && (
+                <div className="video-resume-banner" role="status">
+                  <span>
+                    已为你定位至上次观看位置：P{resumeBanner.partIndex}{' '}
+                    {formatDuration(resumeBanner.progressSec)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSeekRequest({ timeSec: 0, nonce: Date.now() })
+                      setResumeBanner(null)
+                    }}
+                  >
+                    从头播放
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="关闭续播提示"
+                    onClick={() => setResumeBanner(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
               <HlsPlayer
                 part={activePart}
                 poster={video.cover_url}
@@ -413,6 +623,7 @@ export function VideoPage() {
                 onTimeChange={setPlayerTimeMs}
                 onPlayStateChange={setPlayerPlaying}
                 onRateChange={setPlayerRate}
+                seekRequest={seekRequest}
                 overlay={
                   activePart && video.status === 3 ? (
                     <DanmakuLayer
@@ -449,20 +660,24 @@ export function VideoPage() {
               />
 
               <div className="video-page__toolbar">
-                <div className="video-page__toolbar-left">
-                  <span className="video-action-item">
-                    点赞 <strong>{formatCount(video.stat.like_count)}</strong>
-                  </span>
-                  <span className="video-action-item">
-                    投币 <strong>{formatCount(video.stat.coin_count)}</strong>
-                  </span>
-                  <span className="video-action-item">
-                    收藏 <strong>{formatCount(video.stat.favorite_count)}</strong>
-                  </span>
-                  <span className="video-action-item">
-                    转发 <strong>{formatCount(video.stat.share_count)}</strong>
-                  </span>
-                </div>
+                {video.status === 3 ? (
+                  <VideoActionBar
+                    bvid={video.bv_id}
+                    stat={video.stat}
+                    interaction={interaction}
+                    isAuthor={isAuthor}
+                    isLoggedIn={Boolean(user)}
+                    onRequireLogin={() => openAuthModal('login')}
+                    onInteractionChange={setInteraction}
+                    onStatDelta={handleStatDelta}
+                    onCoinBalanceChange={handleCoinBalanceChange}
+                  />
+                ) : (
+                  <div className="video-page__toolbar-left">
+                    <span className="video-action-item">稿件发布后即可互动</span>
+                  </div>
+                )}
+
                 {isAuthor && (
                   <Link to={`/upload?tab=manage&edit=${video.bv_id}`} className="video-edit-link">
                     编辑稿件

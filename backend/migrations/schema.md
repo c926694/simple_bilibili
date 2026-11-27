@@ -39,6 +39,23 @@
 
 ## upload 模块
 
+### `user_checkin` 用户每日签到记录表
+
+保存上海时区的每日签到与奖励。用户 ID 和签到日期联合唯一。
+
+| 字段 | 类型 | 默认值 | 可为空 | 业务说明 | 逻辑外键 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | 无 | 否 | 签到记录主键 ID | — |
+| `user_id` | `BIGINT` | 无 | 否 | 签到用户 ID | `user.id` |
+| `checkin_date` | `DATE` | 无 | 否 | 上海时区的签到日期 | — |
+| `reward_coins` | `TINYINT` | `1` | 否 | 本次签到奖励的代币数量 | — |
+| `created_at` | `DATETIME` | `CURRENT_TIMESTAMP` | 否 | 签到记录创建时间 | — |
+
+| 索引名称 | 类型 | 字段及顺序 | 用途 |
+| --- | --- | --- | --- |
+| `PRIMARY` | 主键 | `id` | 唯一标识记录。 |
+| `uk_user_checkin_date` | 唯一索引 | `user_id`、`checkin_date` | 限制每日奖励次数并支持按月回填位图。 |
+
 ### `upload_task` 分片上传任务表
 
 记录上传任务、文件校验信息和对象位置，支持秒传和续传。
@@ -354,6 +371,25 @@
 
 - `ck_video_interaction_coin_count` 检查约束。累计投币数范围为 0 至 2。
 
+### `interaction_stat_outbox` 互动统计增量待投递记录表
+
+与互动变更同一事务写入。RocketMQ 确认收到消息后删除待发记录。
+
+| 字段 | 类型 | 默认值 | 可为空 | 业务说明 | 逻辑外键 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | 无 | 否 | 互动统计事件 ID | — |
+| `video_id` | `BIGINT` | 无 | 否 | 关联的视频 ID | `video.id` |
+| `like_delta` | `BIGINT` | `0` | 否 | 视频点赞数增量 | — |
+| `coin_delta` | `BIGINT` | `0` | 否 | 视频投币数增量 | — |
+| `favorite_delta` | `BIGINT` | `0` | 否 | 视频收藏人数增量 | — |
+| `share_delta` | `BIGINT` | `0` | 否 | 视频分享数增量 | — |
+| `created_at` | `DATETIME` | `CURRENT_TIMESTAMP` | 否 | 待投递记录创建时间 | — |
+
+| 索引名称 | 类型 | 字段及顺序 | 用途 |
+| --- | --- | --- | --- |
+| `PRIMARY` | 主键 | `id` | 定位待发事件并保持投递顺序。 |
+| `idx_interaction_stat_outbox_video` | 普通索引 | `video_id` | 查询指定视频的待投递增量。 |
+
 ### `coin_ledger` 视频投币扣款流水表
 
 保存每次成功的投币扣款、扣款后余额和防重复记账标识。
@@ -429,7 +465,7 @@
 | `video_id` | `BIGINT` | 无 | 否 | 观看的视频 ID | `video.id` |
 | `part_id` | `BIGINT` | 无 | 否 | 最后观看的分 P ID | `video_part.id` |
 | `progress_sec` | `INT` | `0` | 否 | 最后一次观看进度，单位为秒 | — |
-| `watched_at` | `DATETIME` | 无 | 否 | 最近一次观看时间，由播放进度事件提供 | — |
+| `watched_at` | `DATETIME(6)` | 无 | 否 | 最近一次观看时间，精确到微秒以比较更新与删除顺序 | — |
 
 | 索引名称 | 类型 | 字段及顺序 | 用途 |
 | --- | --- | --- | --- |

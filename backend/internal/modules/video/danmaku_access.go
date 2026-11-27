@@ -12,23 +12,13 @@ type PublishedPart struct {
 	VideoID     int64
 	PartID      int64
 	DurationSec int
+	PartIndex   int
+	Title       string
 }
 
 func (s *Service) PublishedVideoID(ctx context.Context, bvid string) (int64, error) {
-	if !videoCodePattern.MatchString(bvid) {
-		return 0, errcode.VideoNotFound
-	}
-	row, err := s.store.byCode(ctx, bvid, false)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errcode.VideoNotFound
-	}
-	if err != nil {
-		return 0, err
-	}
-	if row.Status != statusPublished {
-		return 0, errcode.VideoNotFound
-	}
-	return row.ID, nil
+	row, err := s.PublishedVideo(ctx, bvid)
+	return row.ID, err
 }
 
 func (s *Service) PublishedVideoPart(ctx context.Context, bvid string, partID int64) (PublishedPart, error) {
@@ -43,5 +33,5 @@ func (s *Service) PublishedVideoPart(ctx context.Context, bvid string, partID in
 	if err != nil {
 		return PublishedPart{}, err
 	}
-	return PublishedPart{VideoID: videoID, PartID: row.ID, DurationSec: row.Duration}, nil
+	return PublishedPart{VideoID: videoID, PartID: row.ID, DurationSec: row.Duration, PartIndex: row.Index, Title: row.Title}, nil
 }

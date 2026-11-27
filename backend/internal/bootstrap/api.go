@@ -13,6 +13,7 @@ import (
 
 	"simple_bilibili/backend/internal/middleware"
 	"simple_bilibili/backend/internal/modules/danmaku"
+	"simple_bilibili/backend/internal/modules/interaction"
 	"simple_bilibili/backend/internal/modules/upload"
 	"simple_bilibili/backend/internal/modules/user"
 	"simple_bilibili/backend/internal/modules/video"
@@ -56,6 +57,7 @@ func (a *App) serveAPI(ctx context.Context, listener net.Listener) (err error) {
 	group.Go(func() error { a.hub.Run(runCtx); return nil })
 	group.Go(func() error { return a.Modules.Danmaku.RunPersistence(runCtx, a.messaging) })
 	group.Go(func() error { return a.Modules.Video.RunStatSync(runCtx, a.messaging) })
+	group.Go(func() error { return a.Modules.Interaction.Run(runCtx, a.messaging) })
 	a.logger.Info("API 已启动", "addr", listener.Addr().String())
 
 	group.Go(func() error {
@@ -86,6 +88,7 @@ func (a *App) router() (*gin.Engine, error) {
 	video.RegisterRoutes(api, video.NewHandler(a.Modules.Video, a.logger), auth, optionalAuth)
 	danmaku.RegisterRoutes(router, danmaku.NewHandler(a.Modules.Danmaku, a.logger), auth, optionalAuth,
 		middleware.RateLimitByUser(a.redis, a.logger, "danmaku", 3, 5*time.Second))
+	interaction.RegisterRoutes(api, interaction.NewHandler(a.Modules.Interaction, a.logger), auth, optionalAuth)
 	return router, nil
 }
 

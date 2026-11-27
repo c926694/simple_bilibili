@@ -11,6 +11,11 @@ import (
 
 type key struct{}
 
+func InTransaction(ctx context.Context) bool {
+	_, ok := ctx.Value(key{}).(*sqlx.Tx)
+	return ok
+}
+
 func WithTx(ctx context.Context, db *sqlx.DB, run func(context.Context) error) (err error) {
 	transaction, err := db.BeginTxx(ctx, nil)
 	if err != nil {

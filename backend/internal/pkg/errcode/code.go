@@ -29,6 +29,15 @@ const (
 	InvalidVideoCover      Code = 20009
 )
 
+const (
+	InsufficientCoins      Code = 40001
+	CannotCoinOwnVideo     Code = 40002
+	CoinLimitReached       Code = 40003
+	FavoriteFolderNotFound Code = 40004
+	DefaultFolderProtected Code = 40005
+	AlreadyCheckedIn       Code = 40006
+)
+
 func (c Code) Error() string {
 	return c.Message()
 }
@@ -83,6 +92,18 @@ func (c Code) Message() string {
 		return "视频或分 P 状态无效"
 	case InvalidVideoCover:
 		return "封面图片无效"
+	case InsufficientCoins:
+		return "代币余额不足"
+	case CannotCoinOwnVideo:
+		return "不能给自己的视频投币"
+	case CoinLimitReached:
+		return "该视频投币数量已达上限"
+	case FavoriteFolderNotFound:
+		return "收藏夹不存在"
+	case DefaultFolderProtected:
+		return "默认收藏夹不可删除"
+	case AlreadyCheckedIn:
+		return "今日已签到"
 	default:
 		return "未知错误"
 	}
