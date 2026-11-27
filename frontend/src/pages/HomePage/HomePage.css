@@ -80,6 +80,132 @@
   color: var(--bili-text-1);
 }
 
+.channel-tag--active {
+  background: #dff6fd;
+  border-color: #9ce0fb;
+  color: var(--bili-blue);
+  font-weight: 600;
+}
+
+.home-sort-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.home-sort-bar__left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.home-sort-bar__heading {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.home-sort-bar__count {
+  font-size: 13px;
+  color: var(--bili-text-3);
+}
+
+.home-sort-bar__tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-sort-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--bili-text-2);
+  background: var(--bili-bg-soft);
+}
+
+.home-sort-btn--active {
+  background: #dff6fd;
+  color: var(--bili-blue);
+  font-weight: 600;
+}
+
+.home-empty-card {
+  grid-column: span 3;
+  grid-row: span 2;
+  border-radius: 8px;
+  border: 1px dashed var(--bili-border);
+  background: var(--bili-bg-soft);
+  padding: 36px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.home-empty-card__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.home-empty-card__desc {
+  font-size: 13px;
+  color: var(--bili-text-3);
+}
+
+.home-empty-card__btn {
+  margin-top: 6px;
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--bili-pink);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.video-slot__line {
+  margin-top: 10px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--bili-bg-soft);
+}
+
+.video-slot__line--short {
+  width: 60%;
+  margin-top: 6px;
+}
+
+.home-pagination {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--bili-text-2);
+}
+
+.home-pagination button {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid var(--bili-border);
+  background: #ffffff;
+  color: var(--bili-text-1);
+}
+
+.home-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .channel-bar__right {
   display: grid;
   grid-template-columns: repeat(3, auto);

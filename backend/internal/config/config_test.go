@@ -38,6 +38,9 @@ func TestLoadExample(t *testing.T) {
 	if cfg.FFmpeg.Binary != "ffmpeg" || cfg.FFmpeg.ProbeBinary != "ffprobe" {
 		t.Errorf("FFmpeg 配置值: %+v", cfg.FFmpeg)
 	}
+	if cfg.FFmpeg.MaxConcurrent != 1 || cfg.FFmpeg.Threads != 2 || cfg.FFmpeg.TaskTimeout != 10*time.Minute {
+		t.Errorf("FFmpeg 转码资源配置值: %+v", cfg.FFmpeg)
+	}
 }
 
 func TestLoadEnvironmentOverrides(t *testing.T) {
@@ -50,6 +53,9 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	t.Setenv("BILIBILI_ROCKETMQ_NAME_SERVERS", "mq1:9876,mq2:9876")
 	t.Setenv("BILIBILI_JWT_ACCESS_TTL", "30m")
 	t.Setenv("BILIBILI_FFMPEG_BINARY", "/usr/local/bin/ffmpeg")
+	t.Setenv("BILIBILI_FFMPEG_MAX_CONCURRENT", "3")
+	t.Setenv("BILIBILI_FFMPEG_THREADS", "4")
+	t.Setenv("BILIBILI_FFMPEG_TASK_TIMEOUT", "2m")
 
 	cfg, err := Load(examplePath)
 	if err != nil {
@@ -66,6 +72,9 @@ func TestLoadEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.JWT.AccessTTL != 30*time.Minute || cfg.FFmpeg.Binary != "/usr/local/bin/ffmpeg" {
 		t.Error("jwt 或 ffmpeg 环境变量覆盖失败")
+	}
+	if cfg.FFmpeg.MaxConcurrent != 3 || cfg.FFmpeg.Threads != 4 || cfg.FFmpeg.TaskTimeout != 2*time.Minute {
+		t.Errorf("FFmpeg 环境变量覆盖后的值: %+v", cfg.FFmpeg)
 	}
 	if cfg.MySQL.Database != "simple_bilibili" || cfg.JWT.RefreshTTL != 168*time.Hour {
 		t.Error("未设置环境变量的配置应保留 YAML 中的值")

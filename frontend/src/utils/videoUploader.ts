@@ -250,7 +250,7 @@ export class VideoMultipartUploader {
       return null
     }
 
-    this.emit('completing', '分片上传完毕，正在通知对象存储合并并触发转码...', 100)
+    this.emit('completing', '分片上传完毕，正在通知对象存储合并文件...', 100)
     const parts: Pick<UploadedPartInfo, 'part_number' | 'etag'>[] = Array.from(
       this.completedParts.entries(),
     )
@@ -258,7 +258,7 @@ export class VideoMultipartUploader {
       .map(([part_number, etag]) => ({ part_number, etag }))
 
     const done = await uploadApi.completeVideoUpload(this.taskId, parts)
-    this.emit('completed', '视频上传并合并成功，已投递后台异步转码队列', 100)
+    this.emit('completed', '视频上传并合并完成，请完善稿件信息后提交投稿', 100)
     return done
   }
 

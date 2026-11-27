@@ -26,13 +26,15 @@ import (
 )
 
 type App struct {
-	Modules  Modules
-	config   config.App
-	db       *sqlx.DB
-	redis    *redis.Client
-	producer *rocketmq.Producer
-	tokens   *jwt.Manager
-	logger   *slog.Logger
+	Modules   Modules
+	config    config.App
+	ffmpeg    config.FFmpeg
+	messaging config.RocketMQ
+	db        *sqlx.DB
+	redis     *redis.Client
+	producer  *rocketmq.Producer
+	tokens    *jwt.Manager
+	logger    *slog.Logger
 }
 
 func Run(serve func(*App, context.Context) error) (err error) {
@@ -81,14 +83,17 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		return nil, errors.Join(err, client.Close(), db.Close())
 	}
 	tokens := jwt.New(cfg.JWT)
+	appLogger := logger.New(cfg.App.Mode)
 	return &App{
-		Modules:  NewModules(db, client, objects, producer, tokens, ids),
-		config:   cfg.App,
-		db:       db,
-		redis:    client,
-		producer: producer,
-		tokens:   tokens,
-		logger:   logger.New(cfg.App.Mode),
+		Modules:   NewModules(db, client, objects, producer, tokens, ids, appLogger),
+		config:    cfg.App,
+		ffmpeg:    cfg.FFmpeg,
+		messaging: cfg.RocketMQ,
+		db:        db,
+		redis:     client,
+		producer:  producer,
+		tokens:    tokens,
+		logger:    appLogger,
 	}, nil
 }
 

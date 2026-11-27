@@ -1,42 +1,94 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { videoApi } from '../../api/video'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
+import { VideoCard } from '../../components/VideoCard/VideoCard'
 import { useAuth } from '../../context/AuthContext'
+import type { Category, VideoSortOption, VideoSummary } from '../../types/video'
 import './HomePage.css'
-
-const CHANNEL_TAGS = [
-  '番剧',
-  '电影',
-  '国创',
-  '电视剧',
-  '综艺',
-  '纪录片',
-  '动画',
-  '游戏',
-  '鬼畜',
-  '音乐',
-  '舞蹈',
-  '影视',
-  '娱乐',
-  '知识',
-  '科技',
-  '资讯',
-  '美食',
-  '生活',
-]
 
 const SIDE_CHANNELS = ['专栏', '活动', '社区中心', '直播', '课堂', '新歌热榜']
 
-const UPCOMING_SLOTS = [
-  { id: 1, title: '推荐视频流即将接入', desc: '基于 ItemCF 与标签画像的首页推荐位' },
-  { id: 2, title: '多清晰度 HLS 视频播放', desc: 'FFmpeg 异步转码 1080P / 720P / 480P' },
-  { id: 3, title: '实时弹幕互动房间', desc: 'WebSocket 房间广播与敏感词过滤' },
-  { id: 4, title: '高并发点赞投币一键三连', desc: '乐观锁扣币与 Redis 计数削峰' },
-  { id: 5, title: '两级楼中楼评论区', desc: '最热 / 最新游标分页与热点评论缓存' },
-  { id: 6, title: '关注动态与消息中心', desc: '混合模式动态流与未读红点提醒' },
+const SORT_OPTIONS: { value: VideoSortOption; label: string }[] = [
+  { value: 'latest', label: '最新发布' },
+  { value: 'hot', label: '全站热门' },
+  { value: 'play', label: '最多播放' },
+  { value: 'danmaku', label: '最多弹幕' },
 ]
+
+const PAGE_SIZE = 16
 
 export function HomePage() {
   const { user, openAuthModal } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const activeCategoryId = searchParams.get('category')
+    ? Number(searchParams.get('category'))
+    : undefined
+  const activeSort = (searchParams.get('sort') as VideoSortOption) || 'latest'
+  const page = Math.max(1, Number(searchParams.get('page') || '1'))
+
+  const [categories, setCategories] = useState<Category[]>([])
+  const [videos, setVideos] = useState<VideoSummary[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    videoApi
+      .listCategories()
+      .then(setCategories)
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setErrorMsg('')
+    videoApi
+      .listVideos({
+        category_id: activeCategoryId,
+        sort: activeSort,
+        page,
+        page_size: PAGE_SIZE,
+      })
+      .then((res) => {
+        if (!cancelled) {
+          setVideos(res.items)
+          setTotal(res.total)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErrorMsg('加载视频列表失败，请稍后刷新重试')
+          setVideos([])
+          setTotal(0)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeCategoryId, activeSort, page])
+
+  const updateQuery = (patch: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(searchParams)
+    for (const [k, v] of Object.entries(patch)) {
+      if (!v) {
+        next.delete(k)
+      } else {
+        next.set(k, v)
+      }
+    }
+    setSearchParams(next)
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const activeCategory = categories.find((c) => c.id === activeCategoryId)
 
   return (
     <div className="home-page">
@@ -59,7 +111,11 @@ export function HomePage() {
               </span>
               <span>动态</span>
             </Link>
-            <Link to="/" className="channel-icon-item">
+            <button
+              type="button"
+              className="channel-icon-item"
+              onClick={() => updateQuery({ category: undefined, sort: 'hot', page: '1' })}
+            >
               <span className="channel-icon-circle channel-icon-circle--hot">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path
@@ -69,14 +125,26 @@ export function HomePage() {
                 </svg>
               </span>
               <span>热门</span>
-            </Link>
+            </button>
           </div>
 
           <div className="channel-bar__tags">
-            {CHANNEL_TAGS.map((tag) => (
-              <Link key={tag} to="/" className="channel-tag">
-                {tag}
-              </Link>
+            <button
+              type="button"
+              className={`channel-tag ${!activeCategoryId ? 'channel-tag--active' : ''}`}
+              onClick={() => updateQuery({ category: undefined, page: '1' })}
+            >
+              全部
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                className={`channel-tag ${activeCategoryId === cat.id ? 'channel-tag--active' : ''}`}
+                onClick={() => updateQuery({ category: String(cat.id), page: '1' })}
+              >
+                {cat.name}
+              </button>
             ))}
           </div>
 
@@ -89,34 +157,55 @@ export function HomePage() {
           </div>
         </section>
 
-        <section className="feed-grid" aria-label="首页推荐区">
+        <section className="home-sort-bar" aria-label="排序切换">
+          <div className="home-sort-bar__left">
+            <h2 className="home-sort-bar__heading">
+              {activeCategory ? `${activeCategory.name}分区` : '全站视频'}
+            </h2>
+            <span className="home-sort-bar__count">共 {total} 个已发布视频</span>
+          </div>
+          <div className="home-sort-bar__tabs">
+            {SORT_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`home-sort-btn ${activeSort === opt.value ? 'home-sort-btn--active' : ''}`}
+                onClick={() => updateQuery({ sort: opt.value, page: '1' })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="feed-grid" aria-label="首页视频区">
           <div className="hero-carousel">
             <div className="hero-carousel__visual">
               <span className="hero-carousel__badge">
-                {user ? `欢迎回来 · ${user.nickname}` : 'simple_bilibili · 账号系统已上线'}
+                {user ? `欢迎回来 · ${user.nickname}` : 'simple_bilibili · 视频社区'}
               </span>
               <div>
                 <h1 className="hero-carousel__title">
-                  {user ? `你好，${user.nickname}` : '登录后开启完整社区体验'}
+                  {user ? `你好，${user.nickname}` : '支持多清晰度 HLS 与分片直传'}
                 </h1>
                 <p className="hero-carousel__desc">
                   {user
-                    ? `当前账号 UID ${user.id}，可用代币余额 ${user.coin_balance} 枚。你可以随时在个人中心修改资料与密码，或前往个人空间查看主页展示效果。`
-                    : '支持用户名 / 邮箱 / 手机号密码登录、双 Token 无感续期、个人资料与头像编辑、公开个人空间展示。'}
+                    ? `当前账号 UID ${user.id}，可用代币余额 ${user.coin_balance} 枚。你可以立刻前往创作中心上传视频，FFmpeg 自动转码为多清晰度 HLS 流畅播放。`
+                    : '登录即可体验 8MB 分片并发直传、SHA-256 秒传、断点续传、异步多清晰度 HLS 转码与投稿管理。'}
                 </p>
               </div>
             </div>
 
             <div className="hero-carousel__footer">
-              <span>{user ? `已绑定账号：${user.username}` : '注册即赠 10 枚初始代币'}</span>
+              <span>{user ? `已登录账号：${user.username}` : '注册即赠 10 枚初始代币'}</span>
               <div className="hero-carousel__actions">
                 {user ? (
                   <>
-                    <Link to="/account" className="hero-cta hero-cta--primary">
-                      个人中心
+                    <Link to="/upload" className="hero-cta hero-cta--primary">
+                      立即投稿
                     </Link>
-                    <Link to={`/space/${user.id}`} className="hero-cta hero-cta--ghost">
-                      我的主页
+                    <Link to="/upload?tab=manage" className="hero-cta hero-cta--ghost">
+                      稿件管理
                     </Link>
                   </>
                 ) : (
@@ -141,20 +230,58 @@ export function HomePage() {
             </div>
           </div>
 
-          {UPCOMING_SLOTS.map((slot) => (
-            <article key={slot.id} className="video-slot">
-              <div className="video-slot__cover">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" strokeWidth="1.6" />
-                  <path d="M10 9.5L15 12L10 14.5V9.5Z" fill="currentColor" />
-                </svg>
-                <span>视频模块待接入</span>
+          {loading ? (
+            Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className="video-slot video-slot--skeleton">
+                <div className="video-slot__cover" />
+                <div className="video-slot__line" />
+                <div className="video-slot__line video-slot__line--short" />
               </div>
-              <h2 className="video-slot__title">{slot.title}</h2>
-              <div className="video-slot__meta">{slot.desc}</div>
-            </article>
-          ))}
+            ))
+          ) : errorMsg ? (
+            <div className="home-empty-card">{errorMsg}</div>
+          ) : videos.length === 0 ? (
+            <div className="home-empty-card">
+              <div className="home-empty-card__title">
+                {activeCategory ? `「${activeCategory.name}」分区暂时还没有视频` : '还没有已发布的视频'}
+              </div>
+              <p className="home-empty-card__desc">
+                上传一段视频，体验分片直传与 FFmpeg 自动转码 HLS 播放吧。
+              </p>
+              <button
+                type="button"
+                className="home-empty-card__btn"
+                onClick={() => (user ? (window.location.href = '/upload') : openAuthModal('login'))}
+              >
+                {user ? '去投稿第一个视频' : '登录后投稿'}
+              </button>
+            </div>
+          ) : (
+            videos.map((item) => <VideoCard key={item.bv_id} video={item} />)
+          )}
         </section>
+
+        {totalPages > 1 && (
+          <div className="home-pagination">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => updateQuery({ page: String(page - 1) })}
+            >
+              上一页
+            </button>
+            <span>
+              第 {page} / {totalPages} 页
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => updateQuery({ page: String(page + 1) })}
+            >
+              下一页
+            </button>
+          </div>
+        )}
       </main>
     </div>
   )

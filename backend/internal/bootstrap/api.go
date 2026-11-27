@@ -13,24 +13,35 @@ import (
 	"simple_bilibili/backend/internal/middleware"
 	"simple_bilibili/backend/internal/modules/upload"
 	"simple_bilibili/backend/internal/modules/user"
+	"simple_bilibili/backend/internal/modules/video"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/response"
 )
 
 func (a *App) RunAPI(ctx context.Context) error {
 	gin.SetMode(a.config.Mode)
-	router, err := a.router()
-	if err != nil {
-		return err
-	}
-
 	listener, err := net.Listen("tcp", a.config.HTTPAddr)
 	if err != nil {
 		return fmt.Errorf("监听 HTTP 地址 %q: %w", a.config.HTTPAddr, err)
 	}
+	return a.serveAPI(ctx, listener)
+}
+
+func (a *App) serveAPI(ctx context.Context, listener net.Listener) (err error) {
+	defer listener.Close()
+	router, err := a.router()
+	if err != nil {
+		return err
+	}
+	transcoder, err := a.Modules.Video.StartConsumer(ctx, a.messaging, a.ffmpeg)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, transcoder.Close()) }()
 	server := &http.Server{
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 
 	served := make(chan error, 1)
@@ -46,7 +57,7 @@ func (a *App) RunAPI(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), a.config.ShutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("关闭 HTTP 服务: %w", err)
+			return errors.Join(fmt.Errorf("关闭 HTTP 服务: %w", err), server.Close())
 		}
 		return httpServeError(<-served)
 	}
@@ -64,6 +75,8 @@ func (a *App) router() (*gin.Engine, error) {
 		middleware.RateLimit(a.redis, a.logger, "login", 20, time.Minute),
 	)
 	upload.RegisterRoutes(api, upload.NewHandler(a.Modules.Upload, a.logger), auth)
+	video.RegisterRoutes(api, video.NewHandler(a.Modules.Video, a.logger), auth,
+		middleware.AuthenticateOptional(a.tokens, a.Modules.User.AccessRevoked, a.logger))
 	return router, nil
 }
 

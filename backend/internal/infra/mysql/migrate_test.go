@@ -83,8 +83,8 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &comments, "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"); err != nil {
 		t.Fatal(err)
 	}
-	if len(comments) != 175 {
-		t.Fatalf("迁移生成了 %d 个字段，期望 175 个", len(comments))
+	if len(comments) != 179 {
+		t.Fatalf("迁移生成了 %d 个字段，期望 179 个", len(comments))
 	}
 	for _, comment := range comments {
 		if !strings.ContainsFunc(comment, func(r rune) bool { return unicode.Is(unicode.Han, r) }) {
@@ -96,7 +96,8 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &applied, "SELECT version FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(applied, []string{"0001_init_schema.up.sql"}) {
+	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql"}
+	if !slices.Equal(applied, versions) {
 		t.Fatalf("迁移版本为 %v", applied)
 	}
 	if err := Migrate(t.Context(), cfg, migrations.FS); err != nil {
@@ -116,7 +117,7 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &applied, "SELECT version FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(applied, []string{"0001_init_schema.up.sql"}) {
+	if !slices.Equal(applied, versions) {
 		t.Fatalf("失败后迁移版本为 %v", applied)
 	}
 	if _, err := db.ExecContext(t.Context(), "SELECT 1; SELECT 2"); err == nil {

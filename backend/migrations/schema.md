@@ -154,11 +154,18 @@
 | `hls_480p_url` | `VARCHAR(512)` | `NULL` | 是 | 480P 的 HLS 播放列表地址，未生成时为空 | — |
 | `transcode_status` | `TINYINT` | `0` | 否 | 转码状态（0 待转码，1 转码中，2 已成功，3 已失败） | — |
 | `created_at` | `DATETIME` | `CURRENT_TIMESTAMP` | 否 | 创建时间 | — |
+| `transcode_job_id` | `BIGINT` | `0` | 否 | 当前转码消息标识，用于识别重复或过期消息 | — |
+| `transcode_attempt` | `INT` | `0` | 否 | 本轮自动重试次数，从 0 开始 | — |
+| `transcode_dispatch_at` | `DATETIME(3)` | `NULL` | 是 | 待投递任务的计划时间，成功投递后清空 | — |
+| `transcode_lease_until` | `DATETIME(3)` | `NULL` | 是 | 转码任务执行期限，进程中断后可重新安排 | — |
 
 | 索引名称 | 类型 | 字段及顺序 | 用途 |
 | --- | --- | --- | --- |
 | `PRIMARY` | 主键 | `id` | 唯一标识记录。 |
 | `uk_video_part_order` | 唯一索引 | `video_id`、`part_index` | 按顺序读取选集，同一视频内的分 P 序号唯一。 |
+| `idx_video_part_reuse` | 普通索引 | `raw_object_key`、`transcode_status`、`id` | 查询可复用的转码结果。 |
+| `idx_video_part_dispatch` | 普通索引 | `transcode_status`、`transcode_dispatch_at`、`id` | 查询到期的待投递任务。 |
+| `idx_video_part_lease` | 普通索引 | `transcode_status`、`transcode_lease_until`、`id` | 查询执行期限已过的转码任务。 |
 
 ### `video_stat` 视频互动统计表
 

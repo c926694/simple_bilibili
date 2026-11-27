@@ -1,9 +1,10 @@
 package mq
 
 type VideoTranscodeTask struct {
-	TaskID    int64  `json:"task_id,string"`
-	UserID    int64  `json:"user_id,string"`
-	ObjectKey string `json:"object_key"`
-	FileHash  string `json:"file_hash"`
-	FileSize  int64  `json:"file_size"`
+	VideoID      int64  `json:"video_id,string"`
+	PartID       int64  `json:"part_id,string"`
+	AuthorID     int64  `json:"author_id,string"`
+	RawObjectKey string `json:"raw_object_key"`
+	Attempt      int    `json:"attempt"`
+	JobID        int64  `json:"job_id,string"`
 }

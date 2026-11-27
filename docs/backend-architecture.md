@@ -2,10 +2,10 @@
 
 ## 1. 进程形态与模块化架构
 
-后端使用单一 Go 模块（`backend/go.mod`），编译为两个独立可执行进程，共享同一套 `internal/` 业务模块与基础设施代码：
+后端使用单一 Go 模块（`backend/go.mod`），以单一可执行进程（`cmd/api`）统一运行全部在线与后台能力：
 
-- **`cmd/api`**：对外提供 Gin HTTP REST 接口与 WebSocket 长连接服务（实时弹幕房间、在线人数统计、站内未读通知推送）。
-- **`cmd/worker`**：运行后台异步任务，包含 RocketMQ 消费者组（FFmpeg 多清晰度 HLS 转码、播放与互动计数回写、用户行为采集与画像更新、站内消息生成、动态写扩散）以及定时计算调度器（全站与标签热度池刷新、ItemCF 视频相似度矩阵计算）。
+- **在线服务**：Gin HTTP REST 接口与 WebSocket 长连接服务（实时弹幕房间、在线人数统计、站内未读通知推送）。
+- **同进程后台任务**：共享同一套连接池与根 `context`，并行运行 RocketMQ 消费者组（FFmpeg 多清晰度 HLS 转码、播放与互动计数回写、用户行为采集与画像更新、站内消息生成、动态写扩散）以及定时计算调度器（全站与标签热度池刷新、ItemCF 视频相似度矩阵计算）。FFmpeg 转码通过固定容量的并发信号量与 `-threads` 参数限制 CPU 占用，确保在线 HTTP 响应稳定。
 
 核心业务代码按领域纵向划分为 8 个高内聚模块，存放在 `backend/internal/modules/` 下。每个模块内部自包含 `handler`、`service`、`store`、`model`、`dto` 与 `routes.go`，有异步消费或定时计算任务的模块在同目录内放置 `consumer.go` 或 `jobs.go`。
 
@@ -67,8 +67,7 @@ flowchart LR
 | 路径 | 职责说明 |
 | :--- | :--- |
 | `backend/go.mod` | Go 模块依赖定义（`module simple_bilibili/backend`） |
-| `backend/cmd/api/main.go` | HTTP 与 WebSocket 服务启动入口，负责配置加载、依赖装配与优雅停机 |
-| `backend/cmd/worker/main.go` | 后台消费者与定时计算任务启动入口，负责消费者注册、任务调度与优雅停机 |
+| `backend/cmd/api/main.go` | 统一服务启动入口，负责配置加载、依赖装配、HTTP/WebSocket 服务与同进程后台消费者/定时任务启停及优雅停机 |
 | `backend/configs/config.example.yaml` | 完整配置项模板与字段说明 |
 | `backend/configs/config.yaml` | 本地运行配置文件（已被 `.gitignore` 忽略） |
 | `backend/migrations/` | 按四位序号递增的 MySQL 迁移脚本（`0001_xxx.up.sql`、`0001_xxx.down.sql`） |
@@ -93,8 +92,8 @@ flowchart LR
 | 模块目录 | 负责业务范围 | 独占数据表 | 允许直接调用的模块 | 模块内标准文件 |
 | :--- | :--- | :--- | :--- | :--- |
 | `internal/modules/user/` | 注册登录、双 Token 续期与注销、个人资料与头像、用户基础信息批量查询、代币余额乐观锁扣减 | `user` | 无 | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
-| `internal/modules/video/` | 稿件发布与编辑、分 P 播放地址、分区与标签、视频详情缓存、播放与互动计数缓冲回写、`LIKE` 基础搜索、查看某 UP 主投稿列表 | `video`、`video_part`、`video_stat`、`tag`、`video_tag` | `user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
-| `internal/modules/upload/` | 文件哈希秒传、MinIO 分片预签名直传、断点续传、分片合并、投递与消费 FFmpeg 多清晰度转码任务 | `upload_task` | `video` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
+| `internal/modules/upload/` | 图片预签名直传、文件哈希秒传、MinIO 分片预签名直传、断点续传与分片合并、已完成上传任务校验 | `upload_task` | 无 | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
+| `internal/modules/video/` | 稿件发布与编辑、分 P 关联上传任务、消费 FFmpeg 多清晰度 HLS 转码任务、分区与标签、视频详情缓存、播放与互动计数缓冲回写、`LIKE` 基础搜索、查看某 UP 主投稿列表 | `category`、`home_banner`、`video`、`video_part`、`video_stat`、`tag`、`video_tag` | `user`、`upload` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
 | `internal/modules/danmaku/` | 历史弹幕按时间分段缓存拉取、发送弹幕敏感词过滤与限流、弹幕异步持久化与 WebSocket 房间广播 | `danmaku` | `video` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
 | `internal/modules/comment/` | 两级楼中楼发表与回复、最热/最新游标分页、热点评论缓存、点赞/点踩、UP 主置顶与点赞标记 | `comment` | `video`、`user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
 | `internal/modules/interaction/` | 点赞、投币事务与 RocketMQ 事务消息、一键三连编排、多收藏夹管理、观看历史缓冲与批量回写 | `video_interaction`、`favorite_folder`、`favorite_item`、`watch_history` | `video`、`user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
@@ -145,11 +144,13 @@ flowchart LR
     Web["前端客户端"]
     UploadH["modules/upload (handler)"]
     UploadS["modules/upload (service)"]
+    VideoH["modules/video (handler)"]
+    VideoS["modules/video (service)"]
     MinIO["MinIO 对象存储"]
     MQ["RocketMQ (video_transcode_topic)"]
-    UploadC["modules/upload (consumer)"]
+    VideoC["modules/video (consumer)"]
     FFmpeg["infra/ffmpeg"]
-    MySQL["MySQL (upload_task / video_part)"]
+    MySQL["MySQL (upload_task / video / video_part)"]
 
     Web -- "1. 初始化任务与获取预签名 URL" --> UploadH
     UploadH --> UploadS
@@ -157,12 +158,16 @@ flowchart LR
     UploadS -- "签发预签名 URL" --> MinIO
     Web -- "2. 分片直传" --> MinIO
     Web -- "3. 请求合并分片" --> UploadH
-    UploadS -- "合并对象并更新状态" --> MinIO
-    UploadS -- "4. 投递转码任务" --> MQ
-    MQ --> UploadC
-    UploadC -- "5. 拉取原始文件并转码 HLS" --> FFmpeg
-    FFmpeg -- "6. 上传 .m3u8 与 .ts" --> MinIO
-    UploadC -- "7. 更新清晰度地址与发布状态" --> MySQL
+    UploadS -- "合并对象并标记上传完成" --> MinIO
+    Web -- "4. 提交稿件与分 P 列表" --> VideoH
+    VideoH --> VideoS
+    VideoS -- "校验已完成上传任务" --> UploadS
+    VideoS --> MySQL
+    VideoS -- "5. 按分 P 投递转码任务" --> MQ
+    MQ --> VideoC
+    VideoC -- "6. 拉取原始文件并转码 HLS" --> FFmpeg
+    FFmpeg -- "7. 上传封面与 .m3u8/.ts" --> MinIO
+    VideoC -- "8. 更新清晰度地址与发布状态" --> MySQL
 ```
 
 ### 5.2 推荐系统实时采集与在线召回链路
@@ -204,8 +209,7 @@ flowchart LR
 | 命令 | 用途 |
 | :--- | :--- |
 | `docker compose -f docker/docker-compose.yml up -d` | 启动 MySQL、Redis、MinIO 与 RocketMQ 容器 |
-| `go run ./cmd/api -config configs/config.yaml` | 在 `backend/` 下启动 HTTP 与 WebSocket 服务 |
-| `go run ./cmd/worker -config configs/config.yaml` | 在 `backend/` 下启动后台消费者与推荐定时计算服务 |
+| `go run ./cmd/api -config configs/config.yaml` | 在 `backend/` 下启动后端统一服务（含 HTTP、WebSocket 与同进程后台消费者） |
 | `go build ./...` | 编译全部后端代码 |
 | `go test -race ./...` | 运行全量后端单元测试 |
 | `go vet ./...` | 执行 Go 静态检查 |

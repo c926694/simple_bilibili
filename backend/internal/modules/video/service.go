@@ -3,17 +3,30 @@ package video
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
+	"golang.org/x/sync/singleflight"
+
+	"simple_bilibili/backend/internal/infra/minio"
+	"simple_bilibili/backend/internal/infra/rocketmq"
+	"simple_bilibili/backend/internal/modules/upload"
 	"simple_bilibili/backend/internal/modules/user"
+	"simple_bilibili/backend/internal/pkg/snowflake"
 )
 
 type Service struct {
-	store *Store
-	users *user.Service
+	store       *Store
+	users       *user.Service
+	uploads     *upload.Service
+	objects     *minio.Client
+	publisher   *rocketmq.Producer
+	ids         *snowflake.Generator
+	logger      *slog.Logger
+	detailLoads singleflight.Group
 }
 
-func NewService(store *Store, users *user.Service) *Service {
-	return &Service{store: store, users: users}
+func NewService(store *Store, users *user.Service, uploads *upload.Service, objects *minio.Client, publisher *rocketmq.Producer, ids *snowflake.Generator, logger *slog.Logger) *Service {
+	return &Service{store: store, users: users, uploads: uploads, objects: objects, publisher: publisher, ids: ids, logger: logger}
 }
 
 func (s *Service) DetailsByIDs(ctx context.Context, ids []int64) ([]Detail, error) {

@@ -6,14 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"simple_bilibili/backend/internal/infra/minio"
-	"simple_bilibili/backend/internal/infra/rocketmq"
-	"simple_bilibili/backend/internal/modules/video"
-	"simple_bilibili/backend/internal/mq"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/snowflake"
 )
@@ -24,15 +20,13 @@ const (
 )
 
 type Service struct {
-	videos   *video.Service
-	store    *Store
-	objects  *minio.Client
-	producer *rocketmq.Producer
-	ids      *snowflake.Generator
+	store   *Store
+	objects *minio.Client
+	ids     *snowflake.Generator
 }
 
-func NewService(videos *video.Service, store *Store, objects *minio.Client, producer *rocketmq.Producer, ids *snowflake.Generator) *Service {
-	return &Service{videos: videos, store: store, objects: objects, producer: producer, ids: ids}
+func NewService(store *Store, objects *minio.Client, ids *snowflake.Generator) *Service {
+	return &Service{store: store, objects: objects, ids: ids}
 }
 
 func (s *Service) ImagePresign(ctx context.Context, userID int64, prefix, extension, contentType string) (imageResponse, error) {
@@ -103,7 +97,7 @@ func (s *Service) resumeVideo(ctx context.Context, userID int64, input videoInpu
 	if errors.Is(err, minio.ErrUploadNotFound) {
 		info, statErr := s.objects.StatObject(ctx, record.ObjectKey)
 		if statErr == nil && info.Size == record.FileSize {
-			// 合片后投递失败时，重新完成同一个任务并返回已上传结果。
+			// 合片完成但任务尚未更新时，复用已经合并的对象。
 			if _, err := s.Complete(ctx, userID, record.ID, nil); err != nil {
 				return initResponse{}, false, err
 			}
@@ -201,14 +195,6 @@ func (s *Service) Complete(ctx context.Context, userID, taskID int64, submitted 
 			return s.store.setStatus(ctx, record.ID, statusCanceled)
 		}
 		if err := s.store.setStatus(ctx, record.ID, statusCompleted); err != nil {
-			return err
-		}
-		// 投递失败时回退数据库状态，下次完成请求可复用已合并对象。
-		event := mq.VideoTranscodeTask{
-			TaskID: record.ID, UserID: record.UserID, ObjectKey: record.ObjectKey,
-			FileHash: record.FileHash, FileSize: record.FileSize,
-		}
-		if _, err := s.producer.PublishJSON(ctx, mq.VideoTranscodeTopic, event, rocketmq.WithKeys(strconv.FormatInt(record.ID, 10))); err != nil {
 			return err
 		}
 		result = completeResponse{TaskID: record.ID, ObjectKey: record.ObjectKey, Status: statusCompleted}

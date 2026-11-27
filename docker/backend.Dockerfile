@@ -27,7 +27,8 @@ FROM alpine:3.23
 ARG APK_MIRROR
 
 RUN sed -i "s/dl-cdn.alpinelinux.org/${APK_MIRROR}/g" /etc/apk/repositories && \
-    apk add --no-cache ca-certificates tzdata wget
+    apk add --no-cache ca-certificates tzdata wget ffmpeg && \
+    mkdir -p /app/data/transcode-tmp
 
 ENV TZ=Asia/Shanghai
 

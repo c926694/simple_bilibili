@@ -43,3 +43,6 @@ ffmpeg:
   binary: ffmpeg              # 可执行文件名或绝对路径
   probe_binary: ffprobe       # 可执行文件名或绝对路径
   work_dir: ./bin/transcode   # 转码中间文件目录
+  max_concurrent: 1
+  threads: 2
+  task_timeout: 10m

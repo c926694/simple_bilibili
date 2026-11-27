@@ -66,9 +66,12 @@ type JWT struct {
 }
 
 type FFmpeg struct {
-	Binary      string `mapstructure:"binary" validate:"required"`
-	ProbeBinary string `mapstructure:"probe_binary" validate:"required"`
-	WorkDir     string `mapstructure:"work_dir" validate:"required"`
+	Binary        string        `mapstructure:"binary" validate:"required"`
+	ProbeBinary   string        `mapstructure:"probe_binary" validate:"required"`
+	WorkDir       string        `mapstructure:"work_dir" validate:"required"`
+	MaxConcurrent int           `mapstructure:"max_concurrent" validate:"gte=1,lte=8"`
+	Threads       int           `mapstructure:"threads" validate:"gte=1,lte=16"`
+	TaskTimeout   time.Duration `mapstructure:"task_timeout" validate:"gt=0"`
 }
 
 func Load(path string) (Config, error) {
@@ -79,6 +82,9 @@ func Load(path string) (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AllowEmptyEnv(true)
 	v.AutomaticEnv()
+	v.SetDefault("ffmpeg.max_concurrent", 1)
+	v.SetDefault("ffmpeg.threads", 2)
+	v.SetDefault("ffmpeg.task_timeout", "10m")
 
 	if err := v.ReadInConfig(); err != nil {
 		return Config{}, fmt.Errorf("读取配置文件 %q: %w", path, err)

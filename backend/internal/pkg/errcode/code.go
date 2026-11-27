@@ -22,6 +22,11 @@ const (
 	InvalidUploadState     Code = 20002
 	InvalidUploadParts     Code = 20003
 	UnsupportedVideoFormat Code = 20004
+	VideoNotFound          Code = 20005
+	CategoryNotFound       Code = 20006
+	VideoPartNotFound      Code = 20007
+	InvalidVideoState      Code = 20008
+	InvalidVideoCover      Code = 20009
 )
 
 func (c Code) Error() string {
@@ -68,6 +73,16 @@ func (c Code) Message() string {
 		return "分片不完整或文件大小校验失败"
 	case UnsupportedVideoFormat:
 		return "不支持的视频文件格式"
+	case VideoNotFound:
+		return "视频不存在"
+	case CategoryNotFound:
+		return "分区不存在或未启用"
+	case VideoPartNotFound:
+		return "视频分 P 不存在"
+	case InvalidVideoState:
+		return "视频或分 P 状态无效"
+	case InvalidVideoCover:
+		return "封面图片无效"
 	default:
 		return "未知错误"
 	}

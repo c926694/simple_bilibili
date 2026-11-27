@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { UserAvatar } from '../UserAvatar/UserAvatar'
 import './BiliHeader.css'
@@ -13,8 +13,16 @@ interface BiliHeaderProps {
 export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
   const { user, openAuthModal, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [keyword, setKeyword] = useState('')
+
+  useEffect(() => {
+    const q = new URLSearchParams(location.search).get('q')
+    if (location.pathname === '/search' && q !== null) {
+      setKeyword(q)
+    }
+  }, [location.pathname, location.search])
 
   useEffect(() => {
     if (!withBanner) {
@@ -35,9 +43,10 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
     event.preventDefault()
     const trimmed = keyword.trim()
     if (!trimmed) {
+      navigate('/search')
       return
     }
-    navigate(`/?q=${encodeURIComponent(trimmed)}`)
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`)
   }
 
   const handleLogout = async () => {
@@ -129,6 +138,10 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
                   <div className="bili-profile-card__menu">
                     <Link to="/account" className="bili-profile-card__item">
                       <span>个人中心</span>
+                      <span>›</span>
+                    </Link>
+                    <Link to="/upload?tab=manage" className="bili-profile-card__item">
+                      <span>稿件管理</span>
                       <span>›</span>
                     </Link>
                     <Link to={`/space/${user.id}`} className="bili-profile-card__item">

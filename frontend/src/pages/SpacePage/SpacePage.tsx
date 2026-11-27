@@ -2,16 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApiError } from '../../api/client'
 import { userApi } from '../../api/user'
+import { videoApi } from '../../api/video'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
 import { UserAvatar } from '../../components/UserAvatar/UserAvatar'
+import { VideoCard } from '../../components/VideoCard/VideoCard'
 import { useAuth } from '../../context/AuthContext'
 import type { PublicUserProfile } from '../../types/user'
+import type { VideoSummary } from '../../types/video'
 import './SpacePage.css'
 
 export function SpacePage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const [profile, setProfile] = useState<PublicUserProfile | null>(null)
+  const [videos, setVideos] = useState<VideoSummary[]>([])
+  const [videoTotal, setVideoTotal] = useState(0)
+  const [videosLoading, setVideosLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -47,6 +53,36 @@ export function SpacePage() {
     }
   }, [id])
 
+  useEffect(() => {
+    if (!id || !profile) {
+      return
+    }
+    let cancelled = false
+    setVideosLoading(true)
+    videoApi
+      .listUserVideos(id, { sort: 'latest', page: 1, page_size: 20 })
+      .then((res) => {
+        if (!cancelled) {
+          setVideos(res.items)
+          setVideoTotal(res.total)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVideos([])
+          setVideoTotal(0)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setVideosLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id, profile])
+
   const isSelf = Boolean(user && profile && user.id === profile.id)
 
   return (
@@ -80,17 +116,22 @@ export function SpacePage() {
               </div>
 
               {isSelf && (
-                <Link to="/account" className="space-banner__btn">
-                  编辑资料
-                </Link>
+                <div className="space-banner__actions">
+                  <Link to="/upload?tab=manage" className="space-banner__btn space-banner__btn--ghost">
+                    稿件管理
+                  </Link>
+                  <Link to="/account" className="space-banner__btn">
+                    编辑资料
+                  </Link>
+                </div>
               )}
             </section>
 
             <section className="space-tabs-bar">
               <div className="space-tabs">
                 <span className="space-tab space-tab--active">主页</span>
+                <span className="space-tab">投稿 ({videoTotal})</span>
                 <span className="space-tab">动态</span>
-                <span className="space-tab">投稿</span>
                 <span className="space-tab">收藏</span>
               </div>
 
@@ -108,14 +149,25 @@ export function SpacePage() {
 
             <section className="space-body">
               <div className="space-card">
-                <h2 className="space-card__title">TA 的视频投稿</h2>
-                <div className="space-empty">暂无投稿视频</div>
+                <h2 className="space-card__title">TA 的视频投稿（{videoTotal}）</h2>
+                {videosLoading ? (
+                  <div className="space-empty">正在加载视频列表...</div>
+                ) : videos.length === 0 ? (
+                  <div className="space-empty">暂无已发布的投稿视频</div>
+                ) : (
+                  <div className="space-videos-grid">
+                    {videos.map((item) => (
+                      <VideoCard key={item.bv_id} video={item} />
+                    ))}
+                  </div>
+                )}
               </div>
 
               <aside className="space-card">
                 <h2 className="space-card__title">个人资料</h2>
                 <div className="space-meta-list">
                   <div>UID：{profile.id}</div>
+                  <div>已发布投稿：{videoTotal} 个</div>
                   <div>注册时间：{profile.created_at.slice(0, 10)}</div>
                 </div>
               </aside>

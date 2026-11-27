@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
+	"log/slog"
 
 	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/infra/rocketmq"
@@ -29,14 +30,15 @@ type Modules struct {
 	Recommend   *recommend.Service
 }
 
-func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, publisher *rocketmq.Producer, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
+func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, publisher *rocketmq.Producer, tokens *jwt.Manager, ids *snowflake.Generator, logger *slog.Logger) Modules {
 	users := user.NewService(user.NewStore(db, client), objects, tokens, ids)
-	videos := video.NewService(video.NewStore(db), users)
+	uploads := upload.NewService(upload.NewStore(db), objects, ids)
+	videos := video.NewService(video.NewStore(db, client), users, uploads, objects, publisher, ids, logger)
 
 	return Modules{
 		User:        users,
 		Video:       videos,
-		Upload:      upload.NewService(videos, upload.NewStore(db), objects, publisher, ids),
+		Upload:      uploads,
 		Danmaku:     danmaku.NewService(videos),
 		Comment:     comment.NewService(users, videos),
 		Interaction: interaction.NewService(users, videos),

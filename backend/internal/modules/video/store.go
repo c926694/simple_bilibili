@@ -5,16 +5,18 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
 
 	"simple_bilibili/backend/internal/pkg/tx"
 )
 
 type Store struct {
-	db *sqlx.DB
+	db    *sqlx.DB
+	redis *redis.Client
 }
 
-func NewStore(db *sqlx.DB) *Store {
-	return &Store{db: db}
+func NewStore(db *sqlx.DB, client *redis.Client) *Store {
+	return &Store{db: db, redis: client}
 }
 
 func (s *Store) videosByIDs(ctx context.Context, ids []int64) ([]video, error) {
