@@ -320,7 +320,7 @@ export function AuthModal() {
           </form>
         )}
 
-        <div className="auth-modal__tip">注册即赠 10 枚初始代币，用于视频投币互动体验</div>
+        <div className="auth-modal__tip">注册即赠 10 枚硬币，每日登录自动签到再领 1 枚</div>
       </div>
     </div>
   )

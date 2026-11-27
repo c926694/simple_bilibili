@@ -15,12 +15,7 @@ import { videoApi } from '../../api/video'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
 import { useAuth } from '../../context/AuthContext'
 import type { Category, VideoDetail } from '../../types/video'
-import {
-  formatDateShort,
-  formatDuration,
-  getTranscodeStatusLabel,
-  getVideoStatusMeta,
-} from '../../utils/format'
+import { formatDateShort, formatDuration, getVideoStatusMeta } from '../../utils/format'
 import { VideoMultipartUploader, type VideoUploadProgress } from '../../utils/videoUploader'
 import './UploadPage.css'
 
@@ -28,11 +23,10 @@ const ALLOWED_VIDEO_EXTS = ['.mp4', '.webm', '.mov', '.mkv']
 const ALLOWED_COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_COVER_BYTES = 5 * 1024 * 1024
 
-interface DraftPart {
+interface UploadedVideoFile {
   uploadTaskId: string
   fileName: string
   objectKey: string
-  title: string
 }
 
 function stripExtension(name: string): string {
@@ -67,12 +61,12 @@ export function UploadPage() {
 
   const [categories, setCategories] = useState<Category[]>([])
 
-  // 上传与投稿表单状态
+  // 单视频上传与投稿表单状态
   const [dragging, setDragging] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [progress, setProgress] = useState<VideoUploadProgress | null>(null)
   const [videoError, setVideoError] = useState('')
-  const [draftParts, setDraftParts] = useState<DraftPart[]>([])
+  const [uploadedFile, setUploadedFile] = useState<UploadedVideoFile | null>(null)
 
   const [title, setTitle] = useState('')
   const [categoryId, setCategoryId] = useState<number>(0)
@@ -90,7 +84,7 @@ export function UploadPage() {
     text: string
   } | null>(null)
 
-  // 稿件管理状态
+  // 视频管理状态
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [myVideos, setMyVideos] = useState<VideoDetail[]>([])
   const [myLoading, setMyLoading] = useState(false)
@@ -106,7 +100,6 @@ export function UploadPage() {
   const [editDescription, setEditDescription] = useState('')
   const [editCoverUrl, setEditCoverUrl] = useState('')
   const [editTagsInput, setEditTagsInput] = useState('')
-  const [editParts, setEditParts] = useState<{ partId: string; title: string }[]>([])
   const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
@@ -140,7 +133,7 @@ export function UploadPage() {
         if (!silent) {
           setManageNotice({
             type: 'error',
-            text: err instanceof ApiError ? err.message : '加载稿件列表失败',
+            text: err instanceof ApiError ? err.message : '加载视频列表失败',
           })
         }
       } finally {
@@ -158,17 +151,17 @@ export function UploadPage() {
     }
   }, [activeTab, user, loadMyVideos])
 
-  // 若存在转码中的稿件，每 3 秒静默轮询刷新状态
-  const hasTranscoding = myVideos.some((item) => item.status === 1)
+  // 若存在上传处理中的视频，每 3 秒静默轮询刷新状态
+  const hasProcessing = myVideos.some((item) => item.status === 1)
   useEffect(() => {
-    if (activeTab !== 'manage' || !hasTranscoding) {
+    if (activeTab !== 'manage' || !hasProcessing) {
       return
     }
     const timer = window.setInterval(() => {
       void loadMyVideos(true)
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [activeTab, hasTranscoding, loadMyVideos])
+  }, [activeTab, hasProcessing, loadMyVideos])
 
   const openEditor = useCallback((video: VideoDetail) => {
     setEditingBvid(video.bv_id)
@@ -177,12 +170,6 @@ export function UploadPage() {
     setEditDescription(video.description || '')
     setEditCoverUrl(video.cover_url || '')
     setEditTagsInput((video.tags || []).join(', '))
-    setEditParts(
-      (video.parts || []).map((part) => ({
-        partId: part.id,
-        title: part.title,
-      })),
-    )
     setManageNotice(null)
   }, [])
 
@@ -220,6 +207,7 @@ export function UploadPage() {
 
     setVideoError('')
     setSubmitNotice(null)
+    setUploadedFile(null)
     setSelectedFile(file)
     const uploader = new VideoMultipartUploader(file, (next) => {
       setProgress(next)
@@ -229,20 +217,11 @@ export function UploadPage() {
     try {
       const completed = await uploader.start()
       if (completed) {
-        const defaultTitle = stripExtension(file.name).slice(0, 128) || '分 P 视频'
-        setDraftParts((prev) => {
-          if (prev.some((p) => p.uploadTaskId === completed.task_id)) {
-            return prev
-          }
-          return [
-            ...prev,
-            {
-              uploadTaskId: completed.task_id,
-              fileName: file.name,
-              objectKey: completed.object_key,
-              title: defaultTitle,
-            },
-          ]
+        const defaultTitle = stripExtension(file.name).slice(0, 128) || '未命名视频'
+        setUploadedFile({
+          uploadTaskId: completed.task_id,
+          fileName: file.name,
+          objectKey: completed.object_key,
         })
         setTitle((prev) => (prev.trim() ? prev : defaultTitle))
       }
@@ -284,20 +263,11 @@ export function UploadPage() {
     try {
       const completed = await uploaderRef.current?.resume()
       if (completed && selectedFile) {
-        const defaultTitle = stripExtension(selectedFile.name).slice(0, 128) || '分 P 视频'
-        setDraftParts((prev) => {
-          if (prev.some((p) => p.uploadTaskId === completed.task_id)) {
-            return prev
-          }
-          return [
-            ...prev,
-            {
-              uploadTaskId: completed.task_id,
-              fileName: selectedFile.name,
-              objectKey: completed.object_key,
-              title: defaultTitle,
-            },
-          ]
+        const defaultTitle = stripExtension(selectedFile.name).slice(0, 128) || '未命名视频'
+        setUploadedFile({
+          uploadTaskId: completed.task_id,
+          fileName: selectedFile.name,
+          objectKey: completed.object_key,
         })
         setTitle((prev) => (prev.trim() ? prev : defaultTitle))
       }
@@ -310,6 +280,7 @@ export function UploadPage() {
     await uploaderRef.current?.abort()
     uploaderRef.current = null
     setSelectedFile(null)
+    setUploadedFile(null)
     setProgress(null)
     setVideoError('')
   }
@@ -399,23 +370,11 @@ export function UploadPage() {
     }
   }
 
-  const moveDraftPart = (index: number, delta: -1 | 1) => {
-    const target = index + delta
-    if (target < 0 || target >= draftParts.length) {
-      return
-    }
-    setDraftParts((prev) => {
-      const copy = [...prev]
-      ;[copy[index], copy[target]] = [copy[target], copy[index]]
-      return copy
-    })
-  }
-
   const handleSubmitVideo = async (event: FormEvent) => {
     event.preventDefault()
     setSubmitNotice(null)
-    if (draftParts.length === 0) {
-      setSubmitNotice({ type: 'error', text: '请先至少上传完成一个视频分 P' })
+    if (!uploadedFile) {
+      setSubmitNotice({ type: 'error', text: '请先上传一个视频文件' })
       return
     }
     const trimmedTitle = title.trim()
@@ -436,13 +395,10 @@ export function UploadPage() {
         category_id: categoryId,
         cover_url: coverUrl || undefined,
         tags,
-        parts: draftParts.map((part, idx) => ({
-          upload_task_id: part.uploadTaskId,
-          title: part.title.trim() || `P${idx + 1}`,
-        })),
+        upload_task_id: uploadedFile.uploadTaskId,
       })
 
-      setDraftParts([])
+      setUploadedFile(null)
       setSelectedFile(null)
       setProgress(null)
       setTitle('')
@@ -455,15 +411,15 @@ export function UploadPage() {
         type: 'success',
         text:
           created.status === 3
-            ? `稿件「${created.title}」已复用转码产物并立即发布！`
-            : `稿件「${created.title}」提交成功，后台正在进行 FFmpeg 转码...`,
+            ? `视频「${created.title}」已上传完成并上线！`
+            : `视频「${created.title}」已提交，正在完成上传处理...`,
       })
       switchTab('manage')
       await loadMyVideos(false)
     } catch (err) {
       setSubmitNotice({
         type: 'error',
-        text: err instanceof ApiError ? err.message : '提交稿件失败，请稍后重试',
+        text: err instanceof ApiError ? err.message : '提交投稿失败，请稍后重试',
       })
     } finally {
       setSubmitting(false)
@@ -492,18 +448,14 @@ export function UploadPage() {
         category_id: editCategoryId,
         cover_url: editCoverUrl || undefined,
         tags: parsedTags,
-        parts: editParts.map((p, idx) => ({
-          part_id: p.partId,
-          title: p.title.trim() || `P${idx + 1}`,
-        })),
       })
       setEditingBvid('')
-      setManageNotice({ type: 'success', text: '稿件信息已更新' })
+      setManageNotice({ type: 'success', text: '视频信息已更新' })
       await loadMyVideos(false)
     } catch (err) {
       setManageNotice({
         type: 'error',
-        text: err instanceof ApiError ? err.message : '保存稿件修改失败',
+        text: err instanceof ApiError ? err.message : '保存修改失败',
       })
     } finally {
       setEditSaving(false)
@@ -511,12 +463,12 @@ export function UploadPage() {
   }
 
   const handleDeleteVideo = async (video: VideoDetail) => {
-    if (!window.confirm(`确认下架稿件「${video.title}」吗？下架后其他用户将无法观看。`)) {
+    if (!window.confirm(`确认下架视频「${video.title}」吗？下架后其他用户将无法观看。`)) {
       return
     }
     try {
       await videoApi.deleteVideo(video.bv_id)
-      setManageNotice({ type: 'success', text: `稿件「${video.title}」已下架` })
+      setManageNotice({ type: 'success', text: `视频「${video.title}」已下架` })
       if (editingBvid === video.bv_id) {
         setEditingBvid('')
       }
@@ -524,20 +476,24 @@ export function UploadPage() {
     } catch (err) {
       setManageNotice({
         type: 'error',
-        text: err instanceof ApiError ? err.message : '下架稿件失败',
+        text: err instanceof ApiError ? err.message : '下架视频失败',
       })
     }
   }
 
-  const handleRetryTranscode = async (bvid: string, partId: string) => {
+  const handleRetryVideo = async (video: VideoDetail) => {
+    const failedPart = (video.parts || []).find((p) => p.transcode_status === 3) ?? video.parts?.[0]
+    if (!failedPart) {
+      return
+    }
     try {
-      await videoApi.retryPartTranscode(bvid, partId)
-      setManageNotice({ type: 'success', text: '已重新投递转码任务，请稍候查看进度' })
+      await videoApi.retryPartTranscode(video.bv_id, failedPart.id)
+      setManageNotice({ type: 'success', text: '已重新提交处理，请稍候查看状态' })
       await loadMyVideos(false)
     } catch (err) {
       setManageNotice({
         type: 'error',
-        text: err instanceof ApiError ? err.message : '重新转码失败',
+        text: err instanceof ApiError ? err.message : '重试失败',
       })
     }
   }
@@ -556,7 +512,7 @@ export function UploadPage() {
       ) : !user ? (
         <div className="upload-guest">
           <h2>登录后开始视频投稿</h2>
-          <p>支持 8MB 分片并发直传 MinIO、SHA-256 秒传、断点续传与 FFmpeg 多清晰度转码。</p>
+          <p>支持大文件分片直传、秒传与断点续传，快速发布你的作品。</p>
           <button
             type="button"
             className="upload-primary-btn"
@@ -591,7 +547,7 @@ export function UploadPage() {
                   <span className="upload-header__bar" />
                   <span>创作中心 · 视频投稿</span>
                 </h1>
-                <span className="upload-header__sub">分片直传 MinIO · 秒传 · FFmpeg 自动转码</span>
+                <span className="upload-header__sub">支持分片直传 · 秒传 · 断点续传</span>
               </div>
 
               <input
@@ -634,7 +590,7 @@ export function UploadPage() {
                   </div>
                   <div className="upload-dropzone__title">拖拽视频到此处或点击选择文件</div>
                   <div className="upload-dropzone__hint">
-                    支持 MP4 / WebM / MOV / MKV，最大 4GB，可连续添加多个分 P
+                    支持 MP4 / WebM / MOV / MKV，最大 4GB
                   </div>
                   <span className="upload-primary-btn">上传视频</span>
                 </div>
@@ -652,7 +608,7 @@ export function UploadPage() {
                         <span className="upload-badge upload-badge--blue">断点续传</span>
                       )}
                       {progress.phase === 'completed' ? (
-                        <span className="upload-badge upload-badge--green">已加入分 P 清单</span>
+                        <span className="upload-badge upload-badge--green">已上传完成</span>
                       ) : (
                         <span className="upload-badge upload-badge--blue">{displayPercent}%</span>
                       )}
@@ -689,7 +645,7 @@ export function UploadPage() {
                     )}
                     {progress.phase !== 'completed' && (
                       <button type="button" className="upload-danger-btn" onClick={handleAbort}>
-                        取消任务
+                        取消上传
                       </button>
                     )}
                     {(progress.phase === 'completed' || progress.phase === 'error') && (
@@ -698,7 +654,7 @@ export function UploadPage() {
                         className="upload-secondary-btn"
                         onClick={() => videoInputRef.current?.click()}
                       >
-                        继续添加分 P 视频
+                        重新选择视频
                       </button>
                     )}
                   </div>
@@ -708,68 +664,6 @@ export function UploadPage() {
               {videoError && (
                 <div className="upload-error-box" role="alert">
                   {videoError}
-                </div>
-              )}
-
-              {draftParts.length > 0 && (
-                <div className="draft-parts-box">
-                  <div className="draft-parts-box__head">
-                    <h2>已上传分 P 清单（{draftParts.length}）</h2>
-                    <button
-                      type="button"
-                      className="upload-secondary-btn"
-                      onClick={() => videoInputRef.current?.click()}
-                    >
-                      + 添加分 P
-                    </button>
-                  </div>
-                  <ul className="draft-parts-list">
-                    {draftParts.map((part, idx) => (
-                      <li key={part.uploadTaskId} className="draft-part-row">
-                        <span className="draft-part-row__idx">P{idx + 1}</span>
-                        <input
-                          type="text"
-                          className="upload-input draft-part-row__input"
-                          value={part.title}
-                          maxLength={128}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setDraftParts((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, title: val } : item)),
-                            )
-                          }}
-                          placeholder={`分 P${idx + 1} 标题`}
-                        />
-                        <div className="draft-part-row__ops">
-                          <button
-                            type="button"
-                            className="upload-mini-btn"
-                            disabled={idx === 0}
-                            onClick={() => moveDraftPart(idx, -1)}
-                          >
-                            上移
-                          </button>
-                          <button
-                            type="button"
-                            className="upload-mini-btn"
-                            disabled={idx === draftParts.length - 1}
-                            onClick={() => moveDraftPart(idx, 1)}
-                          >
-                            下移
-                          </button>
-                          <button
-                            type="button"
-                            className="upload-mini-btn upload-mini-btn--danger"
-                            onClick={() =>
-                              setDraftParts((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                          >
-                            移除
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
 
@@ -783,7 +677,7 @@ export function UploadPage() {
                       {coverUrl ? (
                         <img src={coverUrl} alt="视频封面预览" />
                       ) : (
-                        <span>未设置（转码自动截取）</span>
+                        <span>未设置（自动截取视频帧）</span>
                       )}
                     </div>
                     <div className="upload-cover-controls">
@@ -802,7 +696,7 @@ export function UploadPage() {
                           onClick={() => coverInputRef.current?.click()}
                           disabled={coverUploading}
                         >
-                          {coverUploading ? '正在直传封面...' : '上传封面'}
+                          {coverUploading ? '正在上传封面...' : '上传封面'}
                         </button>
                         {coverUrl && (
                           <button
@@ -815,7 +709,7 @@ export function UploadPage() {
                         )}
                       </div>
                       <span className="upload-header__sub">
-                        可选：JPG / PNG / WebP / GIF（≤5MB），不上传将由 FFmpeg 自动截取视频帧
+                        可选：JPG / PNG / WebP / GIF（≤5MB），不上传将自动截取视频帧作为封面
                       </span>
                       {coverNotice && (
                         <span
@@ -842,7 +736,7 @@ export function UploadPage() {
                     value={title}
                     maxLength={128}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="给你的稿件起一个吸引人的标题"
+                    placeholder="给你的视频起一个吸引人的标题"
                     required
                   />
                 </div>
@@ -937,7 +831,7 @@ export function UploadPage() {
                   <button
                     type="submit"
                     className="upload-primary-btn upload-primary-btn--pink"
-                    disabled={submitting || draftParts.length === 0}
+                    disabled={submitting || !uploadedFile}
                   >
                     {submitting ? '正在提交投稿...' : '立即投稿'}
                   </button>
@@ -954,9 +848,9 @@ export function UploadPage() {
                 <div className="manage-filters">
                   {[
                     { value: 'all', label: '全部' },
-                    { value: '1', label: '转码中' },
-                    { value: '3', label: '已发布' },
-                    { value: '4', label: '转码失败' },
+                    { value: '1', label: '上传中' },
+                    { value: '3', label: '已上传完成' },
+                    { value: '4', label: '上传失败' },
                   ].map((item) => (
                     <button
                       key={item.value}
@@ -996,7 +890,7 @@ export function UploadPage() {
                 </div>
               ) : myVideos.length === 0 ? (
                 <div className="manage-empty">
-                  <p>当前筛选下暂无稿件</p>
+                  <p>当前筛选下暂无视频</p>
                   <button
                     type="button"
                     className="upload-primary-btn"
@@ -1017,7 +911,7 @@ export function UploadPage() {
                             {item.cover_url ? (
                               <img src={item.cover_url} alt={item.title} />
                             ) : (
-                              <span>等待生成封面</span>
+                              <span>上传中</span>
                             )}
                           </Link>
 
@@ -1036,41 +930,31 @@ export function UploadPage() {
                             <div className="manage-item__meta">
                               <span>{item.bv_id}</span>
                               {item.category && <span>{item.category.name}</span>}
-                              <span>时长 {formatDuration(item.duration_sec)}</span>
+                              {item.duration_sec > 0 && (
+                                <span>时长 {formatDuration(item.duration_sec)}</span>
+                              )}
                               <span>创建于 {formatDateShort(item.created_at)}</span>
-                            </div>
-
-                            <div className="manage-parts-strip">
-                              {(item.parts || []).map((part) => (
-                                <span key={part.id} className="manage-part-chip">
-                                  P{part.part_index} {part.title} ·{' '}
-                                  {getTranscodeStatusLabel(part.transcode_status)}
-                                  {part.transcode_status === 3 && (
-                                    <button
-                                      type="button"
-                                      className="manage-retry-link"
-                                      onClick={() =>
-                                        void handleRetryTranscode(item.bv_id, part.id)
-                                      }
-                                    >
-                                      重试
-                                    </button>
-                                  )}
-                                </span>
-                              ))}
                             </div>
                           </div>
 
                           <div className="manage-item__actions">
+                            {item.status === 4 && (
+                              <button
+                                type="button"
+                                className="upload-primary-btn"
+                                style={{ height: 36, padding: '0 16px' }}
+                                onClick={() => void handleRetryVideo(item)}
+                              >
+                                重试
+                              </button>
+                            )}
                             <Link to={`/video/${item.bv_id}`} className="upload-secondary-btn">
                               查看
                             </Link>
                             <button
                               type="button"
                               className="upload-secondary-btn"
-                              onClick={() =>
-                                isEditing ? setEditingBvid('') : openEditor(item)
-                              }
+                              onClick={() => (isEditing ? setEditingBvid('') : openEditor(item))}
                             >
                               {isEditing ? '收起' : '编辑'}
                             </button>
@@ -1154,28 +1038,6 @@ export function UploadPage() {
                                 onChange={(e) => setEditDescription(e.target.value)}
                               />
                             </label>
-
-                            {editParts.length > 0 && (
-                              <div className="manage-edit-parts">
-                                <span className="manage-edit-label">分 P 标题</span>
-                                {editParts.map((part, idx) => (
-                                  <div key={part.partId} className="draft-part-row">
-                                    <span className="draft-part-row__idx">P{idx + 1}</span>
-                                    <input
-                                      type="text"
-                                      className="upload-input"
-                                      value={part.title}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        setEditParts((prev) =>
-                                          prev.map((p, i) => (i === idx ? { ...p, title: val } : p)),
-                                        )
-                                      }}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
 
                             <div className="manage-edit-actions">
                               <button

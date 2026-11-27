@@ -76,6 +76,7 @@ func TestDanmakuIntegration(t *testing.T) {
 		}
 		keys := []string{"rate:auth:register:" + c.ip}
 		for _, id := range users {
+			cleanTestCheckin(t, ctx, app, id)
 			if _, err := app.db.ExecContext(ctx, "DELETE FROM user WHERE id = ?", id); err != nil {
 				t.Error(err)
 			}

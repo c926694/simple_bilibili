@@ -18,7 +18,6 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
   const [scrolled, setScrolled] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [checkedInToday, setCheckedInToday] = useState(false)
-  const [checkinBusy, setCheckinBusy] = useState(false)
 
   useEffect(() => {
     if (!user) {
@@ -31,29 +30,17 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
       .then((res) => {
         if (!cancelled) {
           setCheckedInToday(res.checked_in_today)
+          if (res.coin_balance !== user.coin_balance) {
+            setUser({ ...user, coin_balance: res.coin_balance })
+          }
         }
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
-
-  const handleQuickCheckin = async () => {
-    if (!user || checkedInToday || checkinBusy) {
-      return
-    }
-    setCheckinBusy(true)
-    try {
-      const res = await interactionApi.checkin()
-      setCheckedInToday(true)
-      setUser({ ...user, coin_balance: res.coin_balance })
-    } catch {
-      // 已签到或异常由用户中心页详细提示
-    } finally {
-      setCheckinBusy(false)
-    }
-  }
 
   useEffect(() => {
     const q = new URLSearchParams(location.search).get('q')
@@ -156,16 +143,13 @@ export function BiliHeader({ withBanner = false }: BiliHeaderProps) {
                     <div className="bili-profile-card__name">{user.nickname}</div>
                     <div className="bili-profile-card__meta">
                       <span>UID: {user.id}</span>
-                      <span className="bili-profile-card__coin">代币 {user.coin_balance}</span>
+                      <span className="bili-profile-card__coin">硬币 {user.coin_balance}</span>
                     </div>
-                    <button
-                      type="button"
-                      className={`bili-checkin-pill ${checkedInToday ? 'bili-checkin-pill--done' : ''}`}
-                      disabled={checkedInToday || checkinBusy}
-                      onClick={() => void handleQuickCheckin()}
-                    >
-                      {checkedInToday ? '今日已签到' : checkinBusy ? '签到中...' : '每日签到 +1 代币'}
-                    </button>
+                    {checkedInToday && (
+                      <span className="bili-checkin-pill bili-checkin-pill--done">
+                        今日已自动签到 +1 硬币
+                      </span>
+                    )}
                   </div>
                   <div className="bili-profile-card__stats">
                     <Link to={`/space/${user.id}`}>

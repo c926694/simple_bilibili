@@ -131,6 +131,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, id := range testUserIDs {
+			cleanTestCheckin(t, ctx, app, id)
 			if _, err := app.db.ExecContext(ctx, "DELETE FROM upload_task WHERE user_id = ?", id); err != nil {
 				t.Error(err)
 			}
@@ -211,14 +212,18 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	}, 11003, nil)
 
 	var logins []userTokens
-	for _, account := range []string{primaryName, primaryEmail, primaryPhone} {
+	for i, account := range []string{primaryName, primaryEmail, primaryPhone} {
 		var login struct {
 			userTokens
-			User integrationProfile `json:"user"`
+			User          integrationProfile `json:"user"`
+			JustCheckedIn *bool              `json:"just_checked_in"`
 		}
 		main.call(t, http.MethodPost, authURL+"/login", "", map[string]string{"account": account, "password": initialPassword}, 0, &login)
 		if login.User.ID != first.User.ID {
 			t.Fatal("登录返回了其他用户")
+		}
+		if login.JustCheckedIn == nil || *login.JustCheckedIn != (i == 0) || login.User.CoinBalance != 11 {
+			t.Fatalf("登录是否首次签到为 %v，硬币余额为 %d", login.JustCheckedIn, login.User.CoinBalance)
 		}
 		logins = append(logins, login.userTokens)
 	}
@@ -335,6 +340,22 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 	t.Run("用户名与昵称边界", func(t *testing.T) {
 		verifyRegistrationNames(t, acceptedNames, rejectedNames, trackUser)
 	})
+}
+
+func cleanTestCheckin(t *testing.T, ctx context.Context, app *App, userID string) {
+	t.Helper()
+	if _, err := app.db.ExecContext(ctx, "DELETE FROM user_checkin WHERE user_id = ?", userID); err != nil {
+		t.Error(err)
+	}
+	keys := app.redis.Scan(ctx, 0, "checkin:{"+userID+"}:*", 100).Iterator()
+	for keys.Next(ctx) {
+		if err := app.redis.Del(ctx, keys.Val()).Err(); err != nil {
+			t.Error(err)
+		}
+	}
+	if err := keys.Err(); err != nil {
+		t.Error(err)
+	}
 }
 
 func verifyRegistrationNames(t *testing.T, accepted, rejected userIntegration, trackUser func(string)) {

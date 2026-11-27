@@ -174,8 +174,7 @@ export function HistoryPage() {
                           </Link>
                           <div className="history-item__meta">
                             <span>
-                              看到 P{entry.part_index || 1} {entry.part_title} ·{' '}
-                              {formatDuration(entry.progress_sec)} /{' '}
+                              看到 {formatDuration(entry.progress_sec)} /{' '}
                               {formatDuration(entry.video.duration_sec)}
                             </span>
                             <span>观看于 {formatDateShort(entry.watched_at)}</span>

@@ -190,14 +190,14 @@ export function HomePage() {
                 </h1>
                 <p className="hero-carousel__desc">
                   {user
-                    ? `当前账号 UID ${user.id}，可用代币余额 ${user.coin_balance} 枚。你可以立刻前往创作中心上传视频，FFmpeg 自动转码为多清晰度 HLS 流畅播放。`
-                    : '登录即可体验 8MB 分片并发直传、SHA-256 秒传、断点续传、异步多清晰度 HLS 转码与投稿管理。'}
+                    ? `当前账号 UID ${user.id}，可用硬币余额 ${user.coin_balance} 枚。你可以随时前往创作中心上传视频，或体验一键三连与实时弹幕互动。`
+                    : '登录即可体验大视频分片直传、秒传续传、多清晰度播放、实时弹幕与一键三连互动。'}
                 </p>
               </div>
             </div>
 
             <div className="hero-carousel__footer">
-              <span>{user ? `已登录账号：${user.username}` : '注册即赠 10 枚初始代币'}</span>
+              <span>{user ? `已登录账号：${user.username}` : '注册即赠 10 枚硬币 · 每日登录自动签到 +1'}</span>
               <div className="hero-carousel__actions">
                 {user ? (
                   <>

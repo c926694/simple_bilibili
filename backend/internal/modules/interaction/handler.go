@@ -3,6 +3,7 @@ package interaction
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
@@ -183,10 +184,10 @@ func (h *Handler) deleteHistory(c *gin.Context) {
 }
 func (h *Handler) checkinStatus(c *gin.Context) {
 	result, err := h.service.CheckinStatus(c.Request.Context(), identity(c))
-	h.respond(c, result, err)
-}
-func (h *Handler) checkin(c *gin.Context) {
-	result, err := h.service.Checkin(c.Request.Context(), identity(c))
+	result.JustCheckedIn = c.GetBool(middleware.JustCheckedInKey)
+	if result.JustCheckedIn && c.Request.Method == http.MethodPost {
+		result.RewardCoins = 1
+	}
 	h.respond(c, result, err)
 }
 func parseID(c *gin.Context, value string) (int64, bool) {

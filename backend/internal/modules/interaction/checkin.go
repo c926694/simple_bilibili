@@ -2,14 +2,12 @@ package interaction
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/bits"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
-	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/tx"
 )
 
@@ -17,6 +15,7 @@ const bitmapTTL = 93 * 24 * time.Hour
 
 type checkinResponse struct {
 	CheckedInToday bool   `json:"checked_in_today"`
+	JustCheckedIn  bool   `json:"just_checked_in"`
 	Month          string `json:"month"`
 	MonthDays      int    `json:"month_days"`
 	StreakDays     int    `json:"streak_days"`
@@ -53,25 +52,31 @@ func (s *Service) CheckinStatus(ctx context.Context, userID int64) (checkinRespo
 	return s.checkinStatusAt(ctx, userID, day, balance)
 }
 
-func (s *Service) Checkin(ctx context.Context, userID int64) (checkinResponse, error) {
+func (s *Service) EnsureDailyCheckin(ctx context.Context, userID int64) (justCheckedIn bool, balance int, err error) {
 	day, err := shanghaiNow()
 	if err != nil {
-		return checkinResponse{}, err
+		return false, 0, err
 	}
-	key, err := s.ensureBitmap(ctx, userID, monthStart(day))
-	if err != nil {
-		return checkinResponse{}, err
+	month := monthStart(day)
+	key := bitmapKey(userID, month)
+	offset := int64(day.Day() - 1)
+	bit, err := s.store.redis.GetBit(ctx, key, offset).Result()
+	if err != nil || bit == 1 {
+		// 已签到直接使用位图，余额仅在本次发放奖励时返回。
+		return false, 0, err
 	}
-	value, err := s.store.redis.GetBit(ctx, key, int64(day.Day()-1)).Result()
-	if err != nil {
-		return checkinResponse{}, err
+
+	// 缺键时先恢复当月记录，再判定是否需要发放奖励。
+	if _, err := s.ensureBitmap(ctx, userID, month); err != nil {
+		return false, 0, err
 	}
-	if value == 1 {
-		return checkinResponse{}, errcode.AlreadyCheckedIn
+	bit, err = s.store.redis.GetBit(ctx, key, offset).Result()
+	if err != nil || bit == 1 {
+		return false, 0, err
 	}
-	var balance int
+
 	err = s.userTx(ctx, userID, func(ctx context.Context) error {
-		// 唯一日期记录保护并发签到，奖励和签到在同一事务提交。
+		// 唯一日期记录负责去重，签到与奖励在同一事务提交。
 		res, err := tx.Executor(ctx, s.store.db).ExecContext(ctx,
 			"INSERT IGNORE INTO user_checkin (id,user_id,checkin_date,reward_coins) VALUES (?,?,?,1)",
 			s.ids.Next(), userID, day.Format("2006-01-02"))
@@ -79,36 +84,30 @@ func (s *Service) Checkin(ctx context.Context, userID int64) (checkinResponse, e
 			return err
 		}
 		n, err := res.RowsAffected()
-		if err != nil {
+		if err != nil || n == 0 {
 			return err
 		}
-		if n == 0 {
-			return errcode.AlreadyCheckedIn
-		}
 		balance, err = s.users.ChangeCoins(ctx, userID, 1)
+		justCheckedIn = err == nil
 		return err
 	})
-	if err != nil && !errors.Is(err, errcode.AlreadyCheckedIn) {
-		return checkinResponse{}, err
+	if err != nil {
+		return false, 0, err
 	}
-	duplicate := err != nil
-	// 位图可能在提交期间失效，先保证当月记录已完整回填。
-	if _, err := s.ensureBitmap(ctx, userID, monthStart(day)); err != nil {
-		return checkinResponse{}, err
+
+	// 重复请求也修复位图，确保数据库提交后异常退出可以恢复。
+	if _, err := s.ensureBitmap(ctx, userID, month); err != nil {
+		return false, 0, err
 	}
-	if _, err := s.store.redis.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-		pipe.SetBit(ctx, key, int64(day.Day()-1), 1)
+	_, err = s.store.redis.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.SetBit(ctx, key, offset, 1)
 		pipe.Expire(ctx, key, bitmapTTL)
 		return nil
-	}); err != nil {
-		return checkinResponse{}, err
+	})
+	if err != nil {
+		return false, 0, err
 	}
-	if duplicate {
-		return checkinResponse{}, errcode.AlreadyCheckedIn
-	}
-	status, err := s.checkinStatusAt(ctx, userID, day, balance)
-	status.RewardCoins = 1
-	return status, err
+	return justCheckedIn, balance, nil
 }
 
 func (s *Service) checkinStatusAt(ctx context.Context, userID int64, day time.Time, balance int) (checkinResponse, error) {

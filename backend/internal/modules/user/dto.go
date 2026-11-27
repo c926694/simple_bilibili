@@ -76,5 +76,6 @@ func tokenData(pair jwt.Pair) tokenResponse {
 
 type authResponse struct {
 	tokenResponse
-	User profileResponse `json:"user"`
+	User          profileResponse `json:"user"`
+	JustCheckedIn *bool           `json:"just_checked_in,omitempty"`
 }

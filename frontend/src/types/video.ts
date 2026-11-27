@@ -89,7 +89,8 @@ export interface CreateVideoRequest {
   category_id: number
   cover_url?: string
   tags?: string[]
-  parts: CreateVideoPartInput[]
+  upload_task_id?: string
+  parts?: CreateVideoPartInput[]
 }
 
 export interface UpdateVideoPartInput {

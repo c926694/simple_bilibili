@@ -259,7 +259,7 @@ export function AccountPage() {
                     <div className="account-summary__meta">
                       <span>UID：{user.id}</span>
                       <span>用户名：{user.username}</span>
-                      <span>代币余额：{user.coin_balance}</span>
+                      <span>硬币余额：{user.coin_balance}</span>
                     </div>
                   </div>
                 </div>

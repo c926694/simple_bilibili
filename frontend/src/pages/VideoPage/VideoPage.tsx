@@ -592,7 +592,8 @@ export function VideoPage() {
               {resumeBanner && (
                 <div className="video-resume-banner" role="status">
                   <span>
-                    已为你定位至上次观看位置：P{resumeBanner.partIndex}{' '}
+                    已为你定位至上次观看位置：
+                    {video.parts.length > 1 ? `P${resumeBanner.partIndex} ` : ''}
                     {formatDuration(resumeBanner.progressSec)}
                   </span>
                   <button
@@ -739,7 +740,7 @@ export function VideoPage() {
                 </div>
               </div>
 
-              {video.parts.length > 0 && (
+              {video.parts.length > 1 && (
                 <div className="video-parts-card">
                   <div className="video-parts-card__head">
                     <h2>视频选集</h2>

@@ -34,13 +34,13 @@ export function getVideoStatusMeta(status: number): {
 } {
   switch (status) {
     case 1:
-      return { label: '转码中', tone: 'blue' }
+      return { label: '上传中', tone: 'blue' }
     case 2:
-      return { label: '审核中', tone: 'blue' }
+      return { label: '上传中', tone: 'blue' }
     case 3:
-      return { label: '已发布', tone: 'green' }
+      return { label: '已上传完成', tone: 'green' }
     case 4:
-      return { label: '转码失败', tone: 'red' }
+      return { label: '上传失败', tone: 'red' }
     case 5:
       return { label: '已下架', tone: 'gray' }
     default:

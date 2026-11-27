@@ -92,6 +92,7 @@ export interface WatchHistoryPage {
 
 export interface CheckinStatus {
   checked_in_today: boolean
+  just_checked_in?: boolean
   month: string
   month_days: number
   streak_days: number

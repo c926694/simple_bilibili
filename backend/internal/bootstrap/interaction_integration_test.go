@@ -64,7 +64,6 @@ func TestInteractionIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	month := time.Now().In(shanghai).Format("200601")
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -87,7 +86,8 @@ func TestInteractionIntegration(t *testing.T) {
 			}
 		}
 		for _, userID := range users {
-			for _, table := range []string{"user_checkin", "favorite_folder"} {
+			cleanTestCheckin(t, ctx, app, userID)
+			for _, table := range []string{"favorite_folder"} {
 				if _, err := app.db.ExecContext(ctx, "DELETE FROM "+table+" WHERE user_id = ?", userID); err != nil {
 					t.Error(err)
 				}
@@ -95,7 +95,7 @@ func TestInteractionIntegration(t *testing.T) {
 			if _, err := app.db.ExecContext(ctx, "DELETE FROM user WHERE id = ?", userID); err != nil {
 				t.Error(err)
 			}
-			keys = append(keys, "user:refresh:"+userID, "watch:{"+userID+"}:hot", "watch:{"+userID+"}:deleted", "checkin:{"+userID+"}:"+month)
+			keys = append(keys, "user:refresh:"+userID, "watch:{"+userID+"}:hot", "watch:{"+userID+"}:deleted")
 		}
 		if err := app.redis.Del(ctx, keys...).Err(); err != nil {
 			t.Error(err)
@@ -133,7 +133,7 @@ func TestInteractionIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if balance, err := app.Modules.User.ChangeCoins(ctx, poorID, -9); err != nil || balance != 1 {
+	if balance, err := app.Modules.User.ChangeCoins(ctx, poorID, -10); err != nil || balance != 0 {
 		t.Fatalf("准备余额为 %d，错误 %v", balance, err)
 	}
 	ids, err := snowflake.New(1023)
@@ -170,7 +170,7 @@ func TestInteractionIntegration(t *testing.T) {
 		Balance int `json:"coin_balance"`
 	}
 	c.call(t, http.MethodPost, firstPath+"/coin", viewer, map[string]any{"count": 2, "request_id": requestID}, 0, &receipt)
-	if receipt.Count != 2 || receipt.Added != 2 || receipt.Balance != 8 {
+	if receipt.Count != 2 || receipt.Added != 2 || receipt.Balance != 9 {
 		t.Fatalf("并发投币回执不符: %+v", receipt)
 	}
 	waitInteractionStat(t, c, first.code, "coin_count", 2)
@@ -213,7 +213,10 @@ func TestInteractionIntegration(t *testing.T) {
 	verifyFavoriteFolders(t, c, viewer, poor, users[1], first)
 	verifyPlaybackCounts(t, c, app, viewer, users[1], first)
 	verifyWatchHistory(t, c, app, ids, viewer, users[1], first, second)
-	verifyInteractionCheckin(t, c, app, author, users[0], shanghai)
+	mixed := register("intAuto")
+	status := register("intStatus")
+	verifyInteractionCheckin(t, c, app, mixed, users[3], shanghai, true)
+	verifyInteractionCheckin(t, c, app, status, users[4], shanghai, false)
 }
 
 func checkConcurrentCodes(t *testing.T, run func(int) (userEnvelope, error), first, second int) {
@@ -427,21 +430,69 @@ func verifyWatchHistory(t *testing.T, c userIntegration, app *App, ids *snowflak
 	}
 }
 
-func verifyInteractionCheckin(t *testing.T, c userIntegration, app *App, access, userID string, zone *time.Location) {
+func verifyInteractionCheckin(t *testing.T, c userIntegration, app *App, access, userID string, zone *time.Location, includeProfile bool) {
 	t.Helper()
 	const path = "/api/v1/users/me/checkin"
-	checkConcurrentCodes(t, func(_ int) (userEnvelope, error) { return c.request(t.Context(), http.MethodPost, path, access, nil) }, 0, 40006)
-	var result struct {
-		Today   bool `json:"checked_in_today"`
-		Month   string
-		Dates   []int `json:"checked_dates"`
-		Streak  int   `json:"streak_days"`
-		Balance int   `json:"coin_balance"`
+	type status struct {
+		Today         bool `json:"checked_in_today"`
+		JustCheckedIn bool `json:"just_checked_in"`
+		Month         string
+		Dates         []int `json:"checked_dates"`
+		Streak        int   `json:"streak_days"`
+		Balance       int   `json:"coin_balance"`
 	}
+	type response struct {
+		envelope userEnvelope
+		err      error
+	}
+	results := make(chan response, 4)
+	start := make(chan struct{})
+	for index := range 4 {
+		go func() {
+			requestPath := path
+			if includeProfile && index%2 == 0 {
+				requestPath = usersURL + "/me"
+			}
+			<-start
+			envelope, err := c.request(t.Context(), http.MethodGet, requestPath, access, nil)
+			results <- response{envelope, err}
+		}()
+	}
+	close(start)
+	just := 0
+	for range 4 {
+		result := <-results
+		if result.err != nil || result.envelope.Code != 0 {
+			t.Fatalf("并发自动签到返回错误码 %d，错误 %v", result.envelope.Code, result.err)
+		}
+		var data status
+		if err := json.Unmarshal(result.envelope.Data, &data); err != nil {
+			t.Fatal(err)
+		}
+		if data.Balance != 11 {
+			t.Fatalf("并发请求返回硬币余额 %d，期望 11", data.Balance)
+		}
+		if data.JustCheckedIn {
+			just++
+		}
+	}
+	if just > 1 || (!includeProfile && just != 1) {
+		t.Fatalf("并发签到返回了 %d 次本次签到", just)
+	}
+	var count int64
+	if err := app.db.GetContext(t.Context(), &count, "SELECT COUNT(*) FROM user_checkin WHERE user_id = ?", userID); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("并发请求产生了 %d 条签到记录", count)
+	}
+
+	var result status
 	c.call(t, http.MethodGet, path, access, nil, 0, &result)
 	now := time.Now().In(zone)
-	if !result.Today || result.Month != now.Format("2006-01") || len(result.Dates) != 1 || result.Dates[0] != now.Day() || result.Streak != 1 || result.Balance != 11 {
-		t.Fatalf("签到位图或奖励不符: %+v", result)
+	if !result.Today || result.JustCheckedIn || result.Month != now.Format("2006-01") || len(result.Dates) != 1 ||
+		result.Dates[0] != now.Day() || result.Streak != 1 || result.Balance != 11 {
+		t.Fatalf("自动签到后的状态不符: %+v", result)
 	}
 	key := "checkin:{" + userID + "}:" + now.Format("200601")
 	if err := app.redis.Del(t.Context(), key).Err(); err != nil {
@@ -449,10 +500,13 @@ func verifyInteractionCheckin(t *testing.T, c userIntegration, app *App, access,
 	}
 	c.call(t, http.MethodGet, path, access, nil, 0, &result)
 	bit, err := app.redis.GetBit(t.Context(), key, int64(now.Day()-1)).Result()
-	if err != nil || bit != 1 || !result.Today || result.Balance != 11 {
+	if err != nil || bit != 1 || !result.Today || result.JustCheckedIn || result.Balance != 11 {
 		t.Fatalf("从 MySQL 回填位图返回 %+v，位值 %d，错误 %v", result, bit, err)
 	}
-	c.call(t, http.MethodPost, path, access, nil, 40006, nil)
+	c.call(t, http.MethodPost, path, access, nil, 0, &result)
+	if !result.Today || result.JustCheckedIn || result.Balance != 11 {
+		t.Fatalf("兼容签到入口返回 %+v", result)
+	}
 }
 
 func waitInteractionStat(t *testing.T, c userIntegration, bvid, field string, wanted int64) {

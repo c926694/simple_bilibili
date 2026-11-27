@@ -276,12 +276,12 @@ export function HlsPlayer({
       <div className="hls-player hls-player--empty">
         <div className="hls-player__state">
           <div className="hls-player__state-title">
-            {isFailed ? '该分 P 转码失败' : '视频正在后台转码中...'}
+            {isFailed ? '视频上传失败' : '视频上传中，请稍候...'}
           </div>
           <p className="hls-player__state-desc">
             {isFailed
-              ? '原视频解析或转码异常，作者可点击重新转码或检查源文件格式。'
-              : 'FFmpeg 正在生成多清晰度 HLS 切片，转码完成后即可流畅播放。'}
+              ? '视频处理异常，作者可点击重试或重新上传视频文件。'
+              : '视频正在完成最后处理，稍后即可自动开始播放。'}
           </p>
           {isFailed && canRetry && onRetryTranscode && (
             <button
@@ -290,7 +290,7 @@ export function HlsPlayer({
               onClick={onRetryTranscode}
               disabled={retrying}
             >
-              {retrying ? '正在重新提交...' : '重新转码'}
+              {retrying ? '正在重试...' : '重试'}
             </button>
           )}
         </div>

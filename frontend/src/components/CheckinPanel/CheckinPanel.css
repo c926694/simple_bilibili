@@ -26,24 +26,16 @@
   color: var(--bili-text-2);
 }
 
-.checkin-card__btn {
-  height: 36px;
-  padding: 0 20px;
-  border-radius: 8px;
-  background: var(--bili-pink);
-  color: #ffffff;
-  font-size: 13px;
+.checkin-card__badge {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #e6f7ff;
+  color: var(--bili-blue);
+  font-size: 12px;
   font-weight: 600;
-}
-
-.checkin-card__btn:hover:not(:disabled) {
-  background: var(--bili-pink-hover);
-}
-
-.checkin-card__btn--done {
-  background: var(--bili-bg-soft);
-  color: var(--bili-text-3);
-  cursor: default;
+  display: inline-flex;
+  align-items: center;
 }
 
 .checkin-card__notice {

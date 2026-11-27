@@ -1,24 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError } from '../../api/client'
 import { interactionApi } from '../../api/interaction'
 import { useAuth } from '../../context/AuthContext'
 import type { CheckinStatus } from '../../types/interaction'
 import './CheckinPanel.css'
 
-function daysInMonth(monthStr: string): number {
-  const [y, m] = monthStr.split('-').map(Number)
-  if (!y || !m) {
-    return 30
-  }
-  return new Date(y, m, 0).getDate()
-}
-
 export function CheckinPanel() {
   const { user, setUser } = useAuth()
   const [status, setStatus] = useState<CheckinStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState('')
 
   const loadStatus = useCallback(async () => {
     if (!user) {
@@ -42,57 +31,34 @@ export function CheckinPanel() {
     void loadStatus()
   }, [loadStatus])
 
-  const handleCheckin = async () => {
-    if (!user || busy) {
-      return
-    }
-    setBusy(true)
-    setNotice('')
-    try {
-      const res = await interactionApi.checkin()
-      setStatus(res)
-      setUser({ ...user, coin_balance: res.coin_balance })
-      setNotice(`签到成功，获得 +${res.reward_coins} 枚代币！`)
-    } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : '签到失败，请稍后重试')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   if (!user) {
     return null
   }
 
-  const totalDays = status?.month_days || daysInMonth(status?.month ?? '')
+  const totalDays = status?.month_days || 30
   const checkedDates = status?.checked_dates ?? []
   const checkedSet = new Set(checkedDates)
 
   return (
-    <section className="checkin-card" aria-label="每日签到">
+    <section className="checkin-card" aria-label="每日硬币签到">
       <div className="checkin-card__head">
         <div>
-          <h2 className="checkin-card__title">每日签到领代币</h2>
+          <h2 className="checkin-card__title">每日登录自动签到</h2>
           <p className="checkin-card__sub">
             {status
-              ? `${status.month} 已累计签到 ${checkedDates.length} / ${totalDays} 天 · 连续签到 ${status.streak_days} 天 · 当前代币 ${status.coin_balance} 枚`
-              : '每日签到可领取 1 枚代币'}
+              ? `${status.month} 已累计签到 ${checkedDates.length} / ${totalDays} 天 · 连续签到 ${status.streak_days} 天 · 当前硬币 ${status.coin_balance} 枚`
+              : '每日首次登录自动获得 1 枚硬币'}
           </p>
         </div>
 
-        <button
-          type="button"
-          className={`checkin-card__btn ${status?.checked_in_today ? 'checkin-card__btn--done' : ''}`}
-          disabled={loading || busy || Boolean(status?.checked_in_today)}
-          onClick={() => void handleCheckin()}
-        >
-          {status?.checked_in_today ? '今日已签到' : busy ? '签到中...' : '立即签到 +1 代币'}
-        </button>
+        <span className="checkin-card__badge">
+          {status?.checked_in_today ? '今日已自动签到 +1 硬币' : '每日登录自动签到'}
+        </span>
       </div>
 
-      {notice && (
+      {status?.just_checked_in && (
         <div className="checkin-card__notice" role="status">
-          {notice}
+          欢迎回来！今日已自动完成签到，硬币 +1
         </div>
       )}
 

@@ -93,7 +93,7 @@ func (c Code) Message() string {
 	case InvalidVideoCover:
 		return "封面图片无效"
 	case InsufficientCoins:
-		return "代币余额不足"
+		return "硬币余额不足"
 	case CannotCoinOwnVideo:
 		return "不能给自己的视频投币"
 	case CoinLimitReached:

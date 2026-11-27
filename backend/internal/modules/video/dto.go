@@ -26,12 +26,13 @@ type partInput struct {
 }
 
 type draftInput struct {
-	Title       *string      `json:"title"`
-	Description *string      `json:"description"`
-	CategoryID  *int32       `json:"category_id"`
-	CoverURL    *string      `json:"cover_url"`
-	Tags        *[]string    `json:"tags"`
-	Parts       *[]partInput `json:"parts"`
+	UploadTaskID *int64       `json:"upload_task_id,string"`
+	Title        *string      `json:"title"`
+	Description  *string      `json:"description"`
+	CategoryID   *int32       `json:"category_id"`
+	CoverURL     *string      `json:"cover_url"`
+	Tags         *[]string    `json:"tags"`
+	Parts        *[]partInput `json:"parts"`
 }
 
 type listFilter struct {

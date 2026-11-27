@@ -23,5 +23,5 @@ func RegisterRoutes(api *gin.RouterGroup, h *Handler, auth, optionalAuth gin.Han
 	api.DELETE("/history", auth, h.deleteHistory)
 	api.DELETE("/history/:bvid", auth, h.deleteHistory)
 	api.GET("/users/me/checkin", auth, h.checkinStatus)
-	api.POST("/users/me/checkin", auth, h.checkin)
+	api.POST("/users/me/checkin", auth, h.checkinStatus)
 }

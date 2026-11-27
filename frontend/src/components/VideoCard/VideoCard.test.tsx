@@ -11,7 +11,7 @@ describe('video utils & VideoCard', () => {
     expect(formatDuration(3665)).toBe('1:01:05')
     expect(formatCount(999)).toBe('999')
     expect(formatCount(12500)).toBe('1.3万')
-    expect(getVideoStatusMeta(3).label).toBe('已发布')
+    expect(getVideoStatusMeta(3).label).toBe('已上传完成')
     expect(getTranscodeStatusLabel(2)).toBe('转码完成')
   })
 

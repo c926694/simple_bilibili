@@ -78,9 +78,10 @@ func (a *App) router() (*gin.Engine, error) {
 		return nil, fmt.Errorf("配置可信代理: %w", err)
 	}
 	api := router.Group("/api/v1")
-	auth := middleware.Authenticate(a.tokens, a.Modules.User.AccessRevoked, a.logger)
-	optionalAuth := middleware.AuthenticateOptional(a.tokens, a.Modules.User.AccessRevoked, a.logger)
-	user.RegisterRoutes(api, user.NewHandler(a.Modules.User, a.logger), auth,
+	checkin := a.Modules.Interaction.EnsureDailyCheckin
+	auth := middleware.Authenticate(a.tokens, a.Modules.User.AccessRevoked, checkin, a.logger)
+	optionalAuth := middleware.AuthenticateOptional(a.tokens, a.Modules.User.AccessRevoked, checkin, a.logger)
+	user.RegisterRoutes(api, user.NewHandler(a.Modules.User, a.logger, checkin), auth,
 		middleware.RateLimit(a.redis, a.logger, "register", 5, time.Minute),
 		middleware.RateLimit(a.redis, a.logger, "login", 20, time.Minute),
 	)

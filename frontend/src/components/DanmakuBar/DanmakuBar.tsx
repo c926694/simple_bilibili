@@ -90,12 +90,13 @@ export function DanmakuBar({
       <div className="danmaku-bar__controls">
         <button
           type="button"
-          className={`danmaku-switch-btn ${enabled ? 'danmaku-switch-btn--on' : ''}`}
+          className={`bili-dm-toggle ${enabled ? 'bili-dm-toggle--on' : ''}`}
           onClick={onToggleEnabled}
           aria-pressed={enabled}
           aria-label={enabled ? '关闭弹幕' : '开启弹幕'}
+          title={enabled ? '关闭弹幕' : '开启弹幕'}
         >
-          弹幕 {enabled ? '开' : '关'}
+          <span className="bili-dm-toggle__knob">弹</span>
         </button>
 
         <div className="danmaku-style-anchor">
@@ -104,8 +105,9 @@ export function DanmakuBar({
             className="danmaku-style-btn"
             onClick={() => setPanelOpen((prev) => !prev)}
             aria-label="弹幕样式设置"
+            title="弹幕样式设置"
           >
-            样式
+            A
           </button>
 
           {panelOpen && (

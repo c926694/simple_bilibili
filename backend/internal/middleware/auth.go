@@ -13,20 +13,23 @@ import (
 )
 
 const (
-	UserIDKey = "user_id"
-	JTIKey    = "jti"
-	ExpiryKey = "exp"
+	UserIDKey        = "user_id"
+	JTIKey           = "jti"
+	ExpiryKey        = "exp"
+	JustCheckedInKey = "just_checked_in"
 )
 
-func Authenticate(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), logger *slog.Logger) gin.HandlerFunc {
-	return authenticate(tokens, revoked, logger, false)
+type DailyCheckinHook func(context.Context, int64) (bool, int, error)
+
+func Authenticate(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), onAuthenticated DailyCheckinHook, logger *slog.Logger) gin.HandlerFunc {
+	return authenticate(tokens, revoked, onAuthenticated, logger, false)
 }
 
-func AuthenticateOptional(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), logger *slog.Logger) gin.HandlerFunc {
-	return authenticate(tokens, revoked, logger, true)
+func AuthenticateOptional(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), onAuthenticated DailyCheckinHook, logger *slog.Logger) gin.HandlerFunc {
+	return authenticate(tokens, revoked, onAuthenticated, logger, true)
 }
 
-func authenticate(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), logger *slog.Logger, optional bool) gin.HandlerFunc {
+func authenticate(tokens *jwt.Manager, revoked func(context.Context, string) (bool, error), onAuthenticated DailyCheckinHook, logger *slog.Logger, optional bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		parts := strings.Fields(c.GetHeader("Authorization"))
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -46,9 +49,16 @@ func authenticate(tokens *jwt.Manager, revoked func(context.Context, string) (bo
 			unauthenticated(c, optional)
 			return
 		}
+		justCheckedIn, _, err := onAuthenticated(c.Request.Context(), claims.UserID)
+		if err != nil {
+			logger.ErrorContext(c.Request.Context(), "执行每日自动签到", "error", err)
+			response.Fail(c, errcode.InternalError, "")
+			return
+		}
 		c.Set(UserIDKey, claims.UserID)
 		c.Set(JTIKey, claims.ID)
 		c.Set(ExpiryKey, claims.ExpiresAt.Time)
+		c.Set(JustCheckedInKey, justCheckedIn)
 		c.Next()
 	}
 }

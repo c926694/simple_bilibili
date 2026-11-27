@@ -38,19 +38,39 @@
   gap: 8px;
 }
 
-.danmaku-switch-btn {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 6px;
-  background: var(--bili-bg-soft);
-  color: var(--bili-text-2);
-  font-size: 12px;
-  font-weight: 600;
+.bili-dm-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: #9499a0;
+  transition: background-color 0.2s ease;
   flex-shrink: 0;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
 }
 
-.danmaku-switch-btn--on {
-  background: #dff6fd;
+.bili-dm-toggle--on {
+  background: var(--bili-blue);
+}
+
+.bili-dm-toggle__knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #61666d;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.bili-dm-toggle--on .bili-dm-toggle__knob {
+  transform: translateX(20px);
   color: var(--bili-blue);
 }
 
@@ -60,17 +80,20 @@
 }
 
 .danmaku-style-btn {
-  height: 32px;
-  padding: 0 10px;
+  width: 30px;
+  height: 30px;
   border-radius: 6px;
-  border: 1px solid var(--bili-border);
-  background: #ffffff;
+  background: var(--bili-bg-input);
   color: var(--bili-text-1);
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .danmaku-style-btn:hover {
-  border-color: var(--bili-blue);
   color: var(--bili-blue);
 }
 

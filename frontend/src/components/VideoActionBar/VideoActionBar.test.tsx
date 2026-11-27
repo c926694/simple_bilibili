@@ -40,7 +40,7 @@ describe('VideoActionBar 点赞投币收藏与三连', () => {
     fireEvent.click(screen.getByRole('button', { name: '确认投币' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('interaction-toast')).toHaveTextContent('代币余额不足')
+      expect(screen.getByTestId('interaction-toast')).toHaveTextContent('硬币余额不足')
     })
     expect(coinSpy).not.toHaveBeenCalled()
   })

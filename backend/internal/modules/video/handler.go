@@ -195,7 +195,7 @@ func draftRequest(c *gin.Context, create bool) (draftInput, bool) {
 }
 
 func validateDraft(input *draftInput, create bool) bool {
-	if create && (input.Title == nil || input.CategoryID == nil || input.Parts == nil) {
+	if create && (input.Title == nil || input.CategoryID == nil) {
 		return false
 	}
 	if input.Title != nil {
@@ -203,6 +203,16 @@ func validateDraft(input *draftInput, create bool) bool {
 		if *input.Title == "" || utf8.RuneCountInString(*input.Title) > 128 {
 			return false
 		}
+	}
+	if input.UploadTaskID != nil {
+		if !create || *input.UploadTaskID <= 0 || input.Parts != nil {
+			return false
+		}
+		parts := []partInput{{UploadTaskID: *input.UploadTaskID, Title: *input.Title}}
+		input.Parts = &parts
+	}
+	if create && input.Parts == nil {
+		return false
 	}
 	if (input.CategoryID != nil && *input.CategoryID <= 0) ||
 		(input.Description != nil && utf8.RuneCountInString(*input.Description) > 2000) ||

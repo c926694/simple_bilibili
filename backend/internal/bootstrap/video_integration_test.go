@@ -40,6 +40,7 @@ type integrationVideo struct {
 	} `json:"author"`
 	Parts []struct {
 		ID      string `json:"id"`
+		Title   string `json:"title"`
 		Index   int    `json:"part_index"`
 		Status  int    `json:"transcode_status"`
 		HLS1080 string `json:"hls_1080p_url"`
@@ -106,6 +107,7 @@ func TestVideoIntegration(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		cleanTestCheckin(t, ctx, app, userID)
 		type cleanupVideo struct {
 			ID   int64
 			BVID string `db:"bv_id"`
@@ -190,10 +192,13 @@ func TestVideoIntegration(t *testing.T) {
 	uploaded := c.uploadVideoSample(t, access, "sample.mp4", low)
 	title := "测试稿件 %_! " + nonce
 	create := map[string]any{"title": title, "description": "用于验证同进程转码", "category_id": 1,
-		"tags": []string{tagName, tagName}, "parts": []map[string]string{{"upload_task_id": uploaded, "title": "原视频"}}}
+		"tags": []string{tagName, tagName}, "upload_task_id": uploaded}
+	c.call(t, http.MethodPost, videosURL, access, map[string]any{
+		"title": title, "category_id": 1, "upload_task_id": uploaded, "parts": []map[string]string{{"upload_task_id": uploaded, "title": title}},
+	}, 10001, nil)
 	var created integrationVideo
 	c.call(t, http.MethodPost, videosURL, access, create, 0, &created)
-	if created.Status != 1 || len(created.Parts) != 1 || !strings.HasPrefix(created.BVID, "BV") {
+	if created.Status != 1 || len(created.Parts) != 1 || created.Parts[0].Title != title || !strings.HasPrefix(created.BVID, "BV") {
 		t.Fatalf("投稿响应不符: %+v", created)
 	}
 	full := c.waitVideoState(t, created.BVID, "", 3)
@@ -214,6 +219,7 @@ func TestVideoIntegration(t *testing.T) {
 	c.call(t, http.MethodGet, videosURL+"/"+full.BVID, "", nil, 0, nil)
 
 	instantID := c.uploadVideoSample(t, access, "same.mp4", low)
+	delete(create, "upload_task_id")
 	create["parts"] = []map[string]string{{"upload_task_id": instantID, "title": "复用选集"}}
 	var reused integrationVideo
 	create["title"] = "复用 " + nonce

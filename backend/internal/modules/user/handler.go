@@ -27,10 +27,11 @@ var phonePattern = regexp.MustCompile(`^[0-9]{7,15}$`)
 type Handler struct {
 	service *Service
 	logger  *slog.Logger
+	checkin middleware.DailyCheckinHook
 }
 
-func NewHandler(service *Service, logger *slog.Logger) *Handler {
-	return &Handler{service: service, logger: logger}
+func NewHandler(service *Service, logger *slog.Logger, checkin middleware.DailyCheckinHook) *Handler {
+	return &Handler{service: service, logger: logger, checkin: checkin}
 }
 
 func (h *Handler) register(c *gin.Context) {
@@ -66,7 +67,23 @@ func (h *Handler) login(c *gin.Context) {
 		return
 	}
 	result, err := h.service.Login(c.Request.Context(), input)
-	h.respond(c, result, err)
+	if err != nil {
+		h.respond(c, nil, err)
+		return
+	}
+	ctx := c.Request.Context()
+	justCheckedIn, balance, err := h.checkin(ctx, result.User.ID)
+	if err == nil && !justCheckedIn {
+		// 另一条请求可能在登录读取资料后已经发放硬币。
+		balance, err = h.service.CoinBalance(ctx, result.User.ID)
+	}
+	if err != nil {
+		h.respond(c, nil, err)
+		return
+	}
+	result.User.CoinBalance = balance
+	result.JustCheckedIn = &justCheckedIn
+	h.respond(c, result, nil)
 }
 
 func (h *Handler) refresh(c *gin.Context) {

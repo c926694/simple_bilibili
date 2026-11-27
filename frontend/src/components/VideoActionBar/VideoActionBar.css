@@ -8,69 +8,116 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 28px;
 }
 
-.action-btn {
-  position: relative;
+.bili-action-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  color: var(--bili-text-2);
+  gap: 8px;
+  color: #61666d;
   font-size: 14px;
   font-weight: 500;
-  transition: color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+  transition: color 0.18s ease, transform 0.15s ease;
   user-select: none;
+  padding: 2px 0;
 }
 
-.action-btn:hover:not(:disabled) {
-  color: var(--bili-blue);
-  background: #f0faff;
-}
-
-.action-btn--active {
+.bili-action-item:hover:not(:disabled) {
   color: var(--bili-blue);
 }
 
-.action-btn--holding,
-.action-btn--triple-sync {
-  color: var(--bili-pink);
-  transform: scale(1.06);
+.bili-action-item--active {
+  color: var(--bili-blue);
 }
 
-.action-btn__icon {
+.bili-action-item__icon-box {
+  position: relative;
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.action-btn__count {
+.bili-action-item__num {
+  min-width: 14px;
   font-variant-numeric: tabular-nums;
 }
 
-.action-btn__ring {
+/* B 站长按三连蓄力抖动与 360 度外圈进度环 */
+.bili-action-item--charging {
+  color: var(--bili-blue);
+}
+
+.bili-action-item--charging .bili-action-item__icon-box svg:not(.bili-triple-ring) {
+  animation: bili-triple-shake 0.24s ease-in-out infinite alternate;
+}
+
+.bili-triple-ring {
   position: absolute;
-  inset: -2px;
-  border-radius: 10px;
-  border: 2px solid var(--bili-pink);
-  animation: triple-charge-pulse 1.5s linear forwards;
+  inset: -3px;
+  width: 44px;
+  height: 44px;
+  transform: rotate(-90deg);
   pointer-events: none;
 }
 
-@keyframes triple-charge-pulse {
-  0% {
-    opacity: 0.35;
-    transform: scale(0.92);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1.04);
+.bili-triple-ring__bg {
+  fill: none;
+  stroke: rgba(0, 174, 236, 0.18);
+  stroke-width: 2.6;
+}
+
+.bili-triple-ring__fg {
+  fill: none;
+  stroke: #00aeec;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: bili-triple-circle 1.5s linear forwards;
+}
+
+/* 三连完成瞬间的光环爆发 */
+.bili-action-item--burst .bili-action-item__icon-box::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2.5px solid #00aeec;
+  box-shadow: 0 0 12px rgba(0, 174, 236, 0.55);
+  animation: bili-triple-burst 0.65s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes bili-triple-circle {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
-.action-bar__hint {
+@keyframes bili-triple-shake {
+  0% {
+    transform: scale(1) rotate(-4deg);
+  }
+  100% {
+    transform: scale(1.1) rotate(4deg);
+  }
+}
+
+@keyframes bili-triple-burst {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
+.bili-action-bar__tip {
   font-size: 12px;
   color: var(--bili-text-3);
 }
@@ -101,7 +148,7 @@
 .interaction-modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.48);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -109,36 +156,194 @@
   padding: 16px;
 }
 
-.interaction-modal {
+/* B 站原版投币弹窗 */
+.bili-coin-modal {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px 28px 26px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.bili-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--bili-text-3);
+}
+
+.bili-modal-close:hover {
+  color: var(--bili-text-1);
+}
+
+.bili-coin-modal__title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--bili-text-1);
+  margin-bottom: 22px;
+}
+
+.bili-coin-modal__title strong {
+  color: var(--bili-blue);
+  font-size: 24px;
+  margin: 0 2px;
+}
+
+.bili-coin-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.bili-coin-card {
+  position: relative;
+  padding: 18px 12px 16px;
+  border-radius: 8px;
+  border: 2px dashed #d9dce0;
+  background: #fafbfc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.15s ease;
+}
+
+.bili-coin-card:hover:not(:disabled) {
+  border-color: var(--bili-blue);
+}
+
+.bili-coin-card--selected {
+  border-style: solid;
+  border-color: var(--bili-blue);
+  background: #f0faff;
+}
+
+.bili-coin-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bili-coin-card__badge {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bili-text-1);
+}
+
+.bili-coin-card--selected .bili-coin-card__badge {
+  color: var(--bili-blue);
+}
+
+.bili-coin-card__art {
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bili-coin-disc {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #35c5ff 0%, #00aeec 100%);
+  border: 3px solid #bae8ff;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 174, 236, 0.28);
+}
+
+.bili-coin-disc--second {
+  margin-left: -12px;
+  background: linear-gradient(145deg, #ff8bb0 0%, #fb7299 100%);
+  border-color: #ffd0df;
+  box-shadow: 0 4px 12px rgba(251, 114, 153, 0.28);
+}
+
+.bili-coin-card__label {
+  font-size: 12px;
+  color: var(--bili-text-3);
+}
+
+.bili-coin-modal__balance {
+  font-size: 13px;
+  color: var(--bili-text-2);
+  margin-bottom: 18px;
+}
+
+.bili-coin-modal__balance strong {
+  color: var(--bili-blue);
+}
+
+.bili-coin-modal__foot,
+.bili-fav-modal__foot {
+  display: flex;
+  justify-content: center;
+}
+
+.bili-modal-confirm-btn {
+  width: 168px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--bili-blue);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.bili-modal-confirm-btn:hover:not(:disabled) {
+  background: var(--bili-blue-hover);
+}
+
+.bili-modal-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* B 站收藏夹弹窗 */
+.bili-fav-modal {
   width: 100%;
   max-width: 420px;
   background: #ffffff;
-  border-radius: 12px;
-  padding: 20px 24px;
-  box-shadow: var(--bili-shadow-md);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
 }
 
-.interaction-modal__head {
+.bili-fav-modal__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--bili-border-light);
 }
 
-.interaction-modal__head h3 {
-  font-size: 17px;
+.bili-fav-modal__head h3 {
+  font-size: 16px;
   font-weight: 600;
 }
 
-.interaction-modal__head button {
+.bili-fav-modal__head button {
   font-size: 22px;
   color: var(--bili-text-3);
 }
 
-.interaction-modal__sub {
-  font-size: 13px;
-  color: var(--bili-text-2);
-  margin-bottom: 16px;
+.bili-fav-modal__body {
+  padding: 16px 20px 10px;
+}
+
+.bili-fav-modal__foot {
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--bili-border-light);
 }
 
 .interaction-modal__empty {
@@ -146,45 +351,6 @@
   text-align: center;
   color: var(--bili-text-3);
   font-size: 13px;
-}
-
-.coin-choice-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.coin-choice-card {
-  padding: 18px 12px;
-  border-radius: 10px;
-  border: 2px solid var(--bili-border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.coin-choice-card--active {
-  border-color: var(--bili-blue);
-  background: #f0faff;
-}
-
-.coin-choice-card:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.coin-choice-card__num {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--bili-blue);
-}
-
-.coin-choice-card__desc {
-  font-size: 12px;
-  color: var(--bili-text-2);
 }
 
 .fav-folder-check-list {
@@ -200,10 +366,20 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-radius: 6px;
-  background: var(--bili-bg-soft);
   cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fav-folder-check-row:hover {
+  background: var(--bili-bg-soft);
+}
+
+.fav-folder-check-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--bili-blue);
 }
 
 .fav-folder-check-row__title {
@@ -231,16 +407,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 18px;
+  padding: 8px 10px;
+  border: 1px dashed var(--bili-border);
+  border-radius: 6px;
+  margin-bottom: 8px;
 }
 
 .fav-new-form input[type='text'] {
   flex: 1;
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--bili-border);
+  height: 30px;
+  border: none;
   font-size: 13px;
+  background: transparent;
+}
+
+.fav-new-form input[type='text']:focus {
+  outline: none;
 }
 
 .fav-new-form__pub {
@@ -251,28 +433,12 @@
   color: var(--bili-text-2);
 }
 
-.interaction-modal__foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.interaction-btn-primary {
-  height: 36px;
-  padding: 0 20px;
-  border-radius: 6px;
-  background: var(--bili-blue);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .interaction-btn-secondary {
-  height: 36px;
-  padding: 0 16px;
+  height: 30px;
+  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid var(--bili-border);
   background: #ffffff;
   color: var(--bili-text-1);
-  font-size: 13px;
+  font-size: 12px;
 }
