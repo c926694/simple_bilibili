@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"image"
@@ -14,10 +15,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	miniogo "github.com/minio/minio-go/v7"
 
 	"simple_bilibili/backend/internal/config"
+	"simple_bilibili/backend/internal/infra/rocketmq"
+	"simple_bilibili/backend/internal/mq"
 )
 
 const uploadsURL = "/api/v1/uploads"
@@ -124,7 +128,7 @@ func (c userIntegration) verifyAvatarUpload(t *testing.T, cfg config.MinIO, obje
 	}
 }
 
-func (c userIntegration) verifyVideoUpload(t *testing.T, cfg config.MinIO, objects *miniogo.Client, access, otherAccess, userID string) {
+func (c userIntegration) verifyVideoUpload(t *testing.T, cfg config.Config, objects *miniogo.Client, access, otherAccess, userID string) {
 	t.Helper()
 	const chunkSize = 8 << 20
 	payload := append(bytes.Repeat([]byte{0x61}, chunkSize), bytes.Repeat([]byte{0x62}, 1<<20)...)
@@ -168,13 +172,22 @@ func (c userIntegration) verifyVideoUpload(t *testing.T, cfg config.MinIO, objec
 	}
 	secondETag := c.putPresigned(t, signed.URLs[1].URL, nil, payload[chunkSize:])
 	parts := []map[string]any{{"part_number": 2, "etag": secondETag}, {"part_number": 1, "etag": firstETag}}
+	events := subscribeTranscodeTask(t, cfg.RocketMQ, id)
 	var complete videoTask
 	c.call(t, http.MethodPost, taskPath+"/complete", access, map[string]any{"parts": parts}, 0, &complete)
 	if complete.Status != 1 || complete.ObjectKey != initialized.ObjectKey || complete.ID != initialized.ID {
 		t.Fatalf("视频合片响应不符: %+v", complete)
 	}
-	t.Logf("RocketMQ 转码任务 ID %s", complete.ID)
-	merged, err := objects.GetObject(t.Context(), cfg.Bucket, initialized.ObjectKey, miniogo.GetObjectOptions{})
+	select {
+	case event := <-events:
+		if event.UserID <= 0 || strconv.FormatInt(event.UserID, 10) != userID || event.ObjectKey != complete.ObjectKey ||
+			event.FileHash != input["file_hash"] || event.FileSize != int64(len(payload)) {
+			t.Fatalf("RocketMQ 转码消息不符: %+v", event)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("等待 RocketMQ 转码消息超时")
+	}
+	merged, err := objects.GetObject(t.Context(), cfg.MinIO.Bucket, initialized.ObjectKey, miniogo.GetObjectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,6 +219,41 @@ func (c userIntegration) verifyVideoUpload(t *testing.T, cfg config.MinIO, objec
 	c.call(t, http.MethodPost, abortPath+"/abort", access, nil, 20002, nil)
 	input["file_name"] = "unsupported.bin"
 	c.call(t, http.MethodPost, initPath, access, input, 20004, nil)
+}
+
+func subscribeTranscodeTask(t *testing.T, cfg config.RocketMQ, taskID int64) <-chan mq.VideoTranscodeTask {
+	t.Helper()
+	key := strconv.FormatInt(taskID, 10)
+	sub, err := rocketmq.NewPushConsumer(t.Context(), cfg, "sdk_test_upload_"+key,
+		rocketmq.WithConsumeFromWhere(rocketmq.ConsumeFromFirstOffset))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := sub.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	events := make(chan mq.VideoTranscodeTask, 1)
+	if err := sub.Subscribe(mq.VideoTranscodeTopic, "*", func(_ context.Context, msg rocketmq.Message) error {
+		var event mq.VideoTranscodeTask
+		if err := msg.DecodeJSON(&event); err != nil {
+			return rocketmq.PermanentError(err)
+		}
+		if event.TaskID == taskID && len(msg.Keys) == 1 && msg.Keys[0] == key {
+			select {
+			case events <- event:
+			default:
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sub.Start(); err != nil {
+		t.Fatal(err)
+	}
+	return events
 }
 
 func (c userIntegration) putPresigned(t *testing.T, endpoint string, headers map[string]string, body []byte) string {

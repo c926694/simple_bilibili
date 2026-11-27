@@ -29,14 +29,14 @@ type Modules struct {
 	Recommend   *recommend.Service
 }
 
-func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, producer *rocketmq.Producer, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
+func NewModules(db *sqlx.DB, client *redis.Client, objects *minio.Client, publisher *rocketmq.Producer, tokens *jwt.Manager, ids *snowflake.Generator) Modules {
 	users := user.NewService(user.NewStore(db, client), objects, tokens, ids)
 	videos := video.NewService(video.NewStore(db), users)
 
 	return Modules{
 		User:        users,
 		Video:       videos,
-		Upload:      upload.NewService(videos, upload.NewStore(db), objects, producer, ids),
+		Upload:      upload.NewService(videos, upload.NewStore(db), objects, publisher, ids),
 		Danmaku:     danmaku.NewService(videos),
 		Comment:     comment.NewService(users, videos),
 		Interaction: interaction.NewService(users, videos),

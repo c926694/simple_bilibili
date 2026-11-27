@@ -84,7 +84,7 @@ flowchart LR
 | `internal/middleware/` | Gin 全局与路由级中间件（TraceID、结构化日志、异常恢复、CORS、JWT 鉴权、Redis Lua 限流、Prometheus 指标） |
 | `internal/ws/` | WebSocket 连接中心、视频弹幕房间连接表、在线人数统计与站内未读通知推送 |
 | `internal/mq/` | RocketMQ Topic、Consumer Group 与 Tag 常量、公共消息体定义与生产者封装 |
-| `internal/infra/` | 第三方中间件与外部工具客户端封装（`mysql`、`redis`、`minio`、`rocketmq`、`ffmpeg`、`sensitive`、`logger`、`metrics`） |
+| `internal/infra/` | 第三方中间件与外部工具客户端封装（`mysql` 含启动自动迁移、`redis`、`minio` 含自动建桶与预签名分片、`rocketmq` 含通用 `Producer` 与推/拉 `PushConsumer`/`PullConsumer` 及任意时间点延迟、`ffmpeg`、`sensitive`、`logger`、`metrics`） |
 | `internal/pkg/` | 无业务耦合的通用基础包（`errcode`、`response`、`jwt`、`password`、`snowflake`、`pagination`、`tx`） |
 | `internal/modules/` | 8 个按业务领域划分的独立业务模块 |
 

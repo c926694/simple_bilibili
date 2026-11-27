@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,10 +204,11 @@ func (s *Service) Complete(ctx context.Context, userID, taskID int64, submitted 
 			return err
 		}
 		// 投递失败时回退数据库状态，下次完成请求可复用已合并对象。
-		if err := s.producer.SendVideoTranscode(ctx, mq.VideoTranscodeTask{
+		event := mq.VideoTranscodeTask{
 			TaskID: record.ID, UserID: record.UserID, ObjectKey: record.ObjectKey,
 			FileHash: record.FileHash, FileSize: record.FileSize,
-		}); err != nil {
+		}
+		if _, err := s.producer.PublishJSON(ctx, mq.VideoTranscodeTopic, event, rocketmq.WithKeys(strconv.FormatInt(record.ID, 10))); err != nil {
 			return err
 		}
 		result = completeResponse{TaskID: record.ID, ObjectKey: record.ObjectKey, Status: statusCompleted}

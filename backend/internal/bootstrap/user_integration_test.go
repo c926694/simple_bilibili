@@ -272,7 +272,7 @@ func TestUserAuthenticationIntegration(t *testing.T) {
 		t.Fatalf("清空头像后返回 %q，期望 %q", reset.AvatarURL, defaultAvatar)
 	}
 	main.verifyAvatarUpload(t, cfg.MinIO, objects, first.Access, second.Access, first.User.ID)
-	main.verifyVideoUpload(t, cfg.MinIO, objects, first.Access, second.Access, first.User.ID)
+	main.verifyVideoUpload(t, cfg, objects, first.Access, second.Access, first.User.ID)
 
 	var rotated userTokens
 	main.call(t, http.MethodPost, authURL+"/refresh", "", refreshBody(first.Refresh), 0, &rotated)

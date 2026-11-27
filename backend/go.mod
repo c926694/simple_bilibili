@@ -3,7 +3,7 @@ module simple_bilibili/backend
 go 1.24.0
 
 require (
-	github.com/apache/rocketmq-client-go/v2 v2.1.2
+	github.com/apache/rocketmq-client-go/v2 v2.1.3-0.20261023013211-58d47b429859
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.27.0

@@ -19,6 +19,7 @@ import (
 	"simple_bilibili/backend/internal/infra/mysql"
 	redisinfra "simple_bilibili/backend/internal/infra/redis"
 	"simple_bilibili/backend/internal/infra/rocketmq"
+	"simple_bilibili/backend/internal/mq"
 	"simple_bilibili/backend/internal/pkg/jwt"
 	"simple_bilibili/backend/internal/pkg/snowflake"
 	"simple_bilibili/backend/migrations"
@@ -75,7 +76,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	if err != nil {
 		return nil, errors.Join(err, client.Close(), db.Close())
 	}
-	producer, err := rocketmq.Connect(ctx, cfg.RocketMQ)
+	producer, err := rocketmq.NewProducer(ctx, cfg.RocketMQ, mq.VideoTranscodeProducerGroup)
 	if err != nil {
 		return nil, errors.Join(err, client.Close(), db.Close())
 	}
