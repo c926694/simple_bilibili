@@ -1,26 +1,46 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthModal } from './components/AuthModal/AuthModal'
+import { PageSkeleton } from './components/RouteTransition/PageSkeleton'
+import { RouteProgressBar } from './components/RouteTransition/RouteProgressBar'
+import { RouteTransition } from './components/RouteTransition/RouteTransition'
 import { AuthProvider } from './context/AuthContext'
-import { AccountPage } from './pages/AccountPage/AccountPage'
 import { HomePage } from './pages/HomePage/HomePage'
-import { SearchPage } from './pages/SearchPage/SearchPage'
-import { SpacePage } from './pages/SpacePage/SpacePage'
-import { UploadPage } from './pages/UploadPage/UploadPage'
-import { VideoPage } from './pages/VideoPage/VideoPage'
+
+const VideoPage = lazy(() =>
+  import('./pages/VideoPage/VideoPage').then((m) => ({ default: m.VideoPage })),
+)
+const SearchPage = lazy(() =>
+  import('./pages/SearchPage/SearchPage').then((m) => ({ default: m.SearchPage })),
+)
+const AccountPage = lazy(() =>
+  import('./pages/AccountPage/AccountPage').then((m) => ({ default: m.AccountPage })),
+)
+const SpacePage = lazy(() =>
+  import('./pages/SpacePage/SpacePage').then((m) => ({ default: m.SpacePage })),
+)
+const UploadPage = lazy(() =>
+  import('./pages/UploadPage/UploadPage').then((m) => ({ default: m.UploadPage })),
+)
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/video/:bvid" element={<VideoPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/space/:id" element={<SpacePage />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <RouteProgressBar />
+        <RouteTransition>
+          <Suspense fallback={<PageSkeleton />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/video/:bvid" element={<VideoPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="/space/:id" element={<SpacePage />} />
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </RouteTransition>
         <AuthModal />
       </AuthProvider>
     </BrowserRouter>

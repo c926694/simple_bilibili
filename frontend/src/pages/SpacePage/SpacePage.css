@@ -201,3 +201,35 @@
     height: auto;
   }
 }
+
+.space-skeleton__banner {
+  height: 192px;
+  border-radius: 10px 10px 0 0;
+}
+
+.space-skeleton__tabs {
+  height: 60px;
+  margin-top: 2px;
+  border-radius: 0 0 10px 10px;
+}
+
+.space-skeleton__heading {
+  width: 140px;
+  height: 22px;
+  margin-bottom: 16px;
+}
+
+.space-skeleton__thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+}
+
+.space-skeleton__line {
+  height: 16px;
+  margin-top: 8px;
+}
+
+.space-skeleton__aside {
+  height: 180px;
+  border-radius: 10px;
+}

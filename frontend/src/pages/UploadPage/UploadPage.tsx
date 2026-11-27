@@ -983,7 +983,17 @@ export function UploadPage() {
               )}
 
               {myLoading ? (
-                <div className="manage-empty">正在加载你的稿件列表...</div>
+                <div className="manage-list" aria-label="正在加载稿件列表">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="manage-item manage-item--skeleton" aria-hidden="true">
+                      <div className="bili-skeleton manage-skeleton__cover" />
+                      <div className="manage-skeleton__body">
+                        <div className="bili-skeleton manage-skeleton__line" />
+                        <div className="bili-skeleton manage-skeleton__line manage-skeleton__line--short" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : myVideos.length === 0 ? (
                 <div className="manage-empty">
                   <p>当前筛选下暂无稿件</p>

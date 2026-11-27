@@ -1,0 +1,22 @@
+.route-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.22s ease;
+}
+
+.route-progress-bar--fading {
+  opacity: 0;
+}
+
+.route-progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00aeec 0%, #33c5ff 68%, #fb7299 100%);
+  box-shadow: 0 0 8px rgba(0, 174, 236, 0.55);
+  transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}

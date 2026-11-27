@@ -1,0 +1,53 @@
+.page-skeleton {
+  min-height: 100vh;
+  background: var(--bili-bg-page);
+}
+
+.page-skeleton__container {
+  max-width: var(--bili-max-width);
+  margin: 0 auto;
+  padding: 24px 60px 64px;
+}
+
+.page-skeleton__hero {
+  height: 54px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+
+.page-skeleton__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.page-skeleton__card {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-skeleton__thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+}
+
+.page-skeleton__line {
+  margin-top: 10px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.page-skeleton__line--short {
+  width: 62%;
+  margin-top: 8px;
+}
+
+@media (max-width: 1024px) {
+  .page-skeleton__container {
+    padding: 20px 24px 48px;
+  }
+
+  .page-skeleton__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

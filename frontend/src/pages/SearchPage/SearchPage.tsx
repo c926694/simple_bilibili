@@ -159,7 +159,15 @@ export function SearchPage() {
         {!keyword ? (
           <div className="search-empty">请输入关键词开始搜索视频或 UP 主</div>
         ) : loading ? (
-          <div className="search-empty">正在搜索“{keyword}”...</div>
+          <div className="search-videos-grid" aria-label={`正在搜索${keyword}`}>
+            {Array.from({ length: 10 }).map((_, idx) => (
+              <div key={idx} className="search-skeleton-card" aria-hidden="true">
+                <div className="bili-skeleton search-skeleton-card__thumb" />
+                <div className="bili-skeleton search-skeleton-card__line" />
+                <div className="bili-skeleton search-skeleton-card__line search-skeleton-card__line--short" />
+              </div>
+            ))}
+          </div>
         ) : errorMsg ? (
           <div className="search-empty search-empty--error">{errorMsg}</div>
         ) : result ? (

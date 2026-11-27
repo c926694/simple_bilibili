@@ -232,10 +232,10 @@ export function HomePage() {
 
           {loading ? (
             Array.from({ length: 6 }).map((_, idx) => (
-              <div key={idx} className="video-slot video-slot--skeleton">
-                <div className="video-slot__cover" />
-                <div className="video-slot__line" />
-                <div className="video-slot__line video-slot__line--short" />
+              <div key={idx} className="video-slot video-slot--skeleton" aria-hidden="true">
+                <div className="video-slot__cover bili-skeleton" />
+                <div className="video-slot__line bili-skeleton" />
+                <div className="video-slot__line video-slot__line--short bili-skeleton" />
               </div>
             ))
           ) : errorMsg ? (

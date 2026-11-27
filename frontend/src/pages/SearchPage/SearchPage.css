@@ -193,3 +193,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+.search-skeleton-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-skeleton-card__thumb {
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+}
+
+.search-skeleton-card__line {
+  height: 14px;
+  margin-top: 10px;
+}
+
+.search-skeleton-card__line--short {
+  width: 60%;
+  margin-top: 6px;
+}

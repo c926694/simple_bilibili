@@ -353,7 +353,20 @@ export function VideoPage() {
 
       <main className="video-page__container">
         {loading ? (
-          <div className="video-page__state-card">正在加载视频内容...</div>
+          <div className="video-page__layout" aria-label="正在加载视频内容">
+            <section className="video-page__main">
+              <div className="bili-skeleton video-skeleton__title" />
+              <div className="bili-skeleton video-skeleton__meta" />
+              <div className="bili-skeleton video-skeleton__player" />
+              <div className="bili-skeleton video-skeleton__bar" />
+              <div className="bili-skeleton video-skeleton__desc" />
+            </section>
+            <aside className="video-page__side">
+              <div className="bili-skeleton video-skeleton__author" />
+              <div className="bili-skeleton video-skeleton__parts" />
+              <div className="bili-skeleton video-skeleton__related" />
+            </aside>
+          </div>
         ) : errorMsg || !video ? (
           <div className="video-page__state-card">
             <h2>{errorMsg || '视频不存在或已下架'}</h2>

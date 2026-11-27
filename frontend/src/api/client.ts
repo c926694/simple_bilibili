@@ -35,6 +35,23 @@ export const tokenStorage = {
 
 let unauthorizedListener: (() => void) | null = null
 let refreshingPromise: Promise<boolean> | null = null
+let pendingRequestCount = 0
+const pendingListeners = new Set<(count: number) => void>()
+
+export function subscribePendingRequests(listener: (count: number) => void): () => void {
+  pendingListeners.add(listener)
+  listener(pendingRequestCount)
+  return () => {
+    pendingListeners.delete(listener)
+  }
+}
+
+function notifyPendingRequests(delta: 1 | -1): void {
+  pendingRequestCount = Math.max(0, pendingRequestCount + delta)
+  for (const listener of pendingListeners) {
+    listener(pendingRequestCount)
+  }
+}
 
 export function setUnauthorizedListener(listener: (() => void) | null): void {
   unauthorizedListener = listener
@@ -105,18 +122,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     return (await res.json()) as ApiEnvelope<T>
   }
 
-  let envelope = await send()
+  notifyPendingRequests(1)
+  try {
+    let envelope = await send()
 
-  if (envelope.code === ERRCODE_UNAUTHORIZED && auth && !skipRefresh && tokenStorage.getRefreshToken()) {
-    const refreshed = await ensureRefreshed()
-    if (refreshed) {
-      envelope = await send()
+    if (envelope.code === ERRCODE_UNAUTHORIZED && auth && !skipRefresh && tokenStorage.getRefreshToken()) {
+      const refreshed = await ensureRefreshed()
+      if (refreshed) {
+        envelope = await send()
+      }
     }
-  }
 
-  if (envelope.code !== ERRCODE_SUCCESS) {
-    throw new ApiError(envelope.code, envelope.msg || '请求失败')
-  }
+    if (envelope.code !== ERRCODE_SUCCESS) {
+      throw new ApiError(envelope.code, envelope.msg || '请求失败')
+    }
 
-  return envelope.data
+    return envelope.data
+  } finally {
+    notifyPendingRequests(-1)
+  }
 }

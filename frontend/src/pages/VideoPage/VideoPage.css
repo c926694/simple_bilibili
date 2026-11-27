@@ -425,3 +425,45 @@
     grid-template-columns: 1fr;
   }
 }
+
+.video-skeleton__title {
+  height: 28px;
+  width: 68%;
+  margin-bottom: 10px;
+}
+
+.video-skeleton__meta {
+  height: 18px;
+  width: 42%;
+  margin-bottom: 16px;
+}
+
+.video-skeleton__player {
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+}
+
+.video-skeleton__bar {
+  margin-top: 12px;
+  height: 44px;
+}
+
+.video-skeleton__desc {
+  margin-top: 16px;
+  height: 92px;
+}
+
+.video-skeleton__author {
+  height: 96px;
+  border-radius: 8px;
+}
+
+.video-skeleton__parts {
+  height: 150px;
+  border-radius: 8px;
+}
+
+.video-skeleton__related {
+  height: 220px;
+  border-radius: 8px;
+}

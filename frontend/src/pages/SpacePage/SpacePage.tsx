@@ -91,7 +91,24 @@ export function SpacePage() {
 
       <main className="space-container">
         {loading ? (
-          <div className="space-card space-empty">正在加载个人空间...</div>
+          <div className="space-skeleton" aria-label="正在加载个人空间">
+            <div className="bili-skeleton space-skeleton__banner" />
+            <div className="bili-skeleton space-skeleton__tabs" />
+            <div className="space-body">
+              <div className="space-card">
+                <div className="bili-skeleton space-skeleton__heading" />
+                <div className="space-videos-grid">
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <div key={idx}>
+                      <div className="bili-skeleton space-skeleton__thumb" />
+                      <div className="bili-skeleton space-skeleton__line" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bili-skeleton space-skeleton__aside" />
+            </div>
+          </div>
         ) : errorMsg || !profile ? (
           <div className="space-card space-empty">{errorMsg || '用户不存在'}</div>
         ) : (
