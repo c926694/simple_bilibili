@@ -81,6 +81,8 @@
 | `uk_upload_task_upload_id` | 唯一索引 | `upload_id` | 定位分片上传会话。 |
 | `idx_upload_task_resume` | 索引 | `user_id`、`file_hash`、`file_size`、`status`、`updated_at DESC`、`id DESC` | 按用户和文件定位最近一次可续传任务。 |
 | `idx_upload_task_dedup` | 索引 | `file_hash`、`file_size`、`status`、`updated_at DESC`、`id DESC` | 查找同一文件已完成的上传记录。 |
+| `idx_upload_task_cleanup` | 索引 | `status`、`updated_at`、`id` | 按状态、更新时间和主键游标分批清理过期上传任务。 |
+| `idx_upload_task_object_key` | 索引 | `object_key` | 按对象键检查是否存在近期秒传复用的上传任务。 |
 
 - 续传时通过 `upload_id` 查询 MinIO 已接收的分片。
 
@@ -183,6 +185,7 @@
 | `idx_video_part_reuse` | 普通索引 | `raw_object_key`、`transcode_status`、`id` | 查询可复用的转码结果。 |
 | `idx_video_part_dispatch` | 普通索引 | `transcode_status`、`transcode_dispatch_at`、`id` | 查询到期的待投递任务。 |
 | `idx_video_part_lease` | 普通索引 | `transcode_status`、`transcode_lease_until`、`id` | 查询执行期限已过的转码任务。 |
+| `idx_video_part_raw_key` | 普通索引 | `raw_object_key` | 清理过期上传任务时批量确认原始视频是否已被稿件引用。 |
 
 ### `video_stat` 视频互动统计表
 

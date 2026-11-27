@@ -8,6 +8,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/lifecycle"
 
 	"simple_bilibili/backend/internal/config"
 )
@@ -68,7 +69,28 @@ func Connect(ctx context.Context, cfg config.MinIO) (*Client, error) {
 	if err := client.SetBucketPolicy(ctx, cfg.Bucket, policy); err != nil {
 		return nil, fmt.Errorf("设置 MinIO 存储桶 %q 的访问策略: %w", cfg.Bucket, err)
 	}
+	lc := lifecycle.NewConfiguration()
+	lc.Rules = []lifecycle.Rule{
+		{
+			ID:         "expire-tmp-uploads",
+			Status:     "Enabled",
+			RuleFilter: lifecycle.Filter{Prefix: "tmp/"},
+			Expiration: lifecycle.Expiration{Days: 1},
+		},
+	}
+	if err := client.SetBucketLifecycle(ctx, cfg.Bucket, lc); err != nil {
+		return nil, fmt.Errorf("设置 MinIO 存储桶 %q 的生命周期规则: %w", cfg.Bucket, err)
+	}
 	return &Client{client: client, core: minio.Core{Client: client}, signer: signer, bucket: cfg.Bucket}, nil
+}
+
+func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	src := minio.CopySrcOptions{Bucket: c.bucket, Object: srcKey}
+	dst := minio.CopyDestOptions{Bucket: c.bucket, Object: dstKey}
+	if _, err := c.client.CopyObject(ctx, dst, src); err != nil {
+		return fmt.Errorf("复制 MinIO 对象 %q 到 %q: %w", srcKey, dstKey, storageError(err))
+	}
+	return nil
 }
 
 func (c *Client) PutObject(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) error {

@@ -64,16 +64,16 @@ describe('AccountPage 头像选择预览与点击保存后预签名直传 MinIO'
         return jsonResponse({
           code: 0,
           data: {
-            upload_url: 'http://127.0.0.1:8088/bilibili/avatars/2001/999.png?X-Amz-Signature=abc',
-            object_key: 'avatars/2001/999.png',
-            public_url: '/storage/avatars/2001/999.png',
+            upload_url: 'http://127.0.0.1:8088/bilibili/tmp/avatars/2001/999.png?X-Amz-Signature=abc',
+            object_key: 'tmp/avatars/2001/999.png',
+            public_url: '/storage/tmp/avatars/2001/999.png',
             headers: { 'Content-Type': 'image/png' },
             expires_in: 300,
           },
           msg: 'ok',
         })
       }
-      if (url.startsWith('http://127.0.0.1:8088/bilibili/avatars/') && method === 'PUT') {
+      if (url.startsWith('http://127.0.0.1:8088/bilibili/tmp/avatars/') && method === 'PUT') {
         return new Response(null, { status: 200, headers: { ETag: '"etag-1"' } })
       }
       if (url === '/api/v1/users/me' && method === 'PUT') {
@@ -121,7 +121,8 @@ describe('AccountPage 头像选择预览与点击保存后预签名直传 MinIO'
     )
     const putIdx = fetchSpy.mock.calls.findIndex(
       (c) =>
-        String(c[0]) === 'http://127.0.0.1:8088/bilibili/avatars/2001/999.png?X-Amz-Signature=abc',
+        String(c[0]) ===
+        'http://127.0.0.1:8088/bilibili/tmp/avatars/2001/999.png?X-Amz-Signature=abc',
     )
     const updateIdx = fetchSpy.mock.calls.findIndex(
       (c) => String(c[0]) === '/api/v1/users/me' && (c[1] as RequestInit | undefined)?.method === 'PUT',
@@ -130,7 +131,7 @@ describe('AccountPage 头像选择预览与点击保存后预签名直传 MinIO'
     expect(putIdx).toBeGreaterThan(presignIdx)
     expect(updateIdx).toBeGreaterThan(putIdx)
     const updateBody = JSON.parse((fetchSpy.mock.calls[updateIdx][1] as RequestInit).body as string)
-    expect(updateBody.avatar_url).toBe('/storage/avatars/2001/999.png')
+    expect(updateBody.avatar_url).toBe('/storage/tmp/avatars/2001/999.png')
     expect(updateBody.nickname).toBe('保存后的昵称')
   })
 })

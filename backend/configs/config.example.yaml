@@ -43,6 +43,9 @@ ffmpeg:
   binary: ffmpeg              # 可执行文件名或绝对路径
   probe_binary: ffprobe       # 可执行文件名或绝对路径
   work_dir: ./bin/transcode   # 转码中间文件目录
-  max_concurrent: 1
-  threads: 2
   task_timeout: 10m
+
+upload:
+  cleanup_interval: 1h        # 过期上传任务定时清理周期
+  task_expire_after: 24h      # 上传任务过期阈值
+  cleanup_batch_size: 100     # 每批巡检清理的记录数

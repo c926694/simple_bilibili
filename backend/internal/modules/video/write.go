@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/media"
 )
@@ -16,12 +18,14 @@ func (s *Service) Create(ctx context.Context, authorID int64, input draftInput) 
 	id := s.ids.Next()
 	row := video{ID: id, BVID: videoCode(id), AuthorID: authorID, CreatedAt: now, Status: statusTranscoding}
 	var parts []part
+	var promotedCoverKey string
 	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
 		// 先核验关联对象，再写入稿件、分 P 和统计。
-		if err := s.applyMetadata(ctx, &row, input); err != nil {
+		var err error
+		promotedCoverKey, err = s.applyMetadata(ctx, &row, input)
+		if err != nil {
 			return err
 		}
-		var err error
 		parts, err = s.prepareParts(ctx, row, *input.Parts, nil)
 		if err != nil {
 			return err
@@ -45,6 +49,9 @@ func (s *Service) Create(ctx context.Context, authorID int64, input draftInput) 
 		return nil
 	})
 	if err != nil {
+		if promotedCoverKey != "" {
+			s.removeCoverQuietly(ctx, promotedCoverKey, "回滚删除已转正封面失败")
+		}
 		return videoDetail{}, err
 	}
 	// 数据库已保存待投递的分 P，提交后再发送消息。
@@ -54,6 +61,7 @@ func (s *Service) Create(ctx context.Context, authorID int64, input draftInput) 
 func (s *Service) Edit(ctx context.Context, authorID int64, code string, input draftInput) (videoDetail, error) {
 	var row video
 	var parts []part
+	var oldCover, promotedCoverKey string
 	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
 		// 编辑与转码状态更新使用同一稿件行锁。
 		var err error
@@ -64,8 +72,10 @@ func (s *Service) Edit(ctx context.Context, authorID int64, code string, input d
 		if row.Status == statusWithdrawn {
 			return errcode.InvalidVideoState
 		}
+		oldCover = row.CoverURL
 		// 更新提交的字段并核验新的分区、封面。
-		if err := s.applyMetadata(ctx, &row, input); err != nil {
+		promotedCoverKey, err = s.applyMetadata(ctx, &row, input)
+		if err != nil {
 			return err
 		}
 		if input.Parts != nil {
@@ -86,7 +96,17 @@ func (s *Service) Edit(ctx context.Context, authorID int64, code string, input d
 		return nil
 	})
 	if err != nil {
+		if promotedCoverKey != "" {
+			s.removeCoverQuietly(ctx, promotedCoverKey, "回滚删除已转正封面失败")
+		}
 		return videoDetail{}, err
+	}
+	if oldCover != "" && oldCover != row.CoverURL {
+		if oldKey, ok := media.PublicImageKey("covers", oldCover); ok {
+			if refs, refErr := s.store.countCoverRefs(ctx, oldCover); refErr == nil && refs == 0 {
+				s.removeCoverQuietly(ctx, oldKey, "删除旧封面失败")
+			}
+		}
 	}
 	// 完成数据库更新后失效公开详情，并发送新增分 P 的任务。
 	return s.finishWrite(ctx, row, parts)
@@ -179,7 +199,7 @@ func (s *Service) ownedVideo(ctx context.Context, authorID int64, code string) (
 	return row, nil
 }
 
-func (s *Service) applyMetadata(ctx context.Context, row *video, input draftInput) error {
+func (s *Service) applyMetadata(ctx context.Context, row *video, input draftInput) (string, error) {
 	if input.Title != nil {
 		row.Title = *input.Title
 	}
@@ -189,26 +209,50 @@ func (s *Service) applyMetadata(ctx context.Context, row *video, input draftInpu
 	if input.CategoryID != nil {
 		enabled, err := s.store.categoryEnabled(ctx, *input.CategoryID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if !enabled {
-			return errcode.CategoryNotFound
+			return "", errcode.CategoryNotFound
 		}
 		row.CategoryID = input.CategoryID
 	}
+	var promotedKey string
 	if input.CoverURL != nil && *input.CoverURL != row.CoverURL {
-		if *input.CoverURL != "" {
-			err := media.VerifyOwnedImage(ctx, s.objects, "covers", row.AuthorID, *input.CoverURL)
-			if errors.Is(err, media.ErrInvalidImage) {
-				return errcode.InvalidVideoCover
-			}
-			if err != nil {
-				return err
+		nextCover := *input.CoverURL
+		if nextCover != "" {
+			if strings.HasPrefix(nextCover, "/storage/tmp/covers/") {
+				promoted, err := media.PromoteOwnedImage(ctx, s.objects, "covers", row.AuthorID, nextCover)
+				if errors.Is(err, media.ErrInvalidImage) {
+					return "", errcode.InvalidVideoCover
+				}
+				if err != nil {
+					return "", err
+				}
+				nextCover = promoted
+				if key, ok := media.PublicImageKey("covers", promoted); ok {
+					promotedKey = key
+				}
+			} else {
+				err := media.VerifyOwnedImage(ctx, s.objects, "covers", row.AuthorID, nextCover)
+				if errors.Is(err, media.ErrInvalidImage) {
+					return "", errcode.InvalidVideoCover
+				}
+				if err != nil {
+					return "", err
+				}
 			}
 		}
-		row.CoverURL = *input.CoverURL
+		row.CoverURL = nextCover
 	}
-	return nil
+	return promotedKey, nil
+}
+
+func (s *Service) removeCoverQuietly(ctx context.Context, key, msg string) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := s.objects.RemoveObject(cleanupCtx, key); err != nil && !errors.Is(err, minio.ErrObjectNotFound) {
+		s.logger.WarnContext(ctx, msg, "object_key", key, "error", err)
+	}
 }
 
 func (s *Service) prepareParts(ctx context.Context, row video, inputs []partInput, old map[int64]part) ([]part, error) {

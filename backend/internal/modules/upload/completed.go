@@ -44,7 +44,7 @@ func (s *Service) GetCompletedTasks(ctx context.Context, userID int64, ids []int
 }
 
 func (s *Store) tasksByIDs(ctx context.Context, ids []int64) ([]task, error) {
-	query, args, err := sqlx.In("SELECT "+taskColumns+" FROM upload_task WHERE id IN (?)", ids)
+	query, args, err := sqlx.In("SELECT "+taskColumns+" FROM upload_task WHERE id IN (?) FOR SHARE", ids)
 	if err != nil {
 		return nil, fmt.Errorf("构造上传任务批量查询: %w", err)
 	}

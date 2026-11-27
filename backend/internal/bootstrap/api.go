@@ -58,6 +58,7 @@ func (a *App) serveAPI(ctx context.Context, listener net.Listener) (err error) {
 	group.Go(func() error { return a.Modules.Danmaku.RunPersistence(runCtx, a.messaging) })
 	group.Go(func() error { return a.Modules.Video.RunStatSync(runCtx, a.messaging) })
 	group.Go(func() error { return a.Modules.Interaction.Run(runCtx, a.messaging) })
+	group.Go(func() error { return a.Modules.Upload.RunCleanup(runCtx, a.Modules.Video.ReferencedRawKeys) })
 	a.logger.Info("API 已启动", "addr", listener.Addr().String())
 
 	group.Go(func() error {

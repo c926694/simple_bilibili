@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"simple_bilibili/backend/internal/config"
 	"simple_bilibili/backend/internal/infra/ffmpeg"
 	"simple_bilibili/backend/internal/infra/minio"
@@ -42,7 +44,11 @@ func (s *Service) StartConsumer(ctx context.Context, messaging config.RocketMQ, 
 		cancel()
 		return nil, err
 	}
-	consumer := &Consumer{service: s, ffmpeg: ffmpeg.New(cfg), config: cfg, client: client, ctx: ctx, cancel: cancel, slots: make(chan struct{}, cfg.MaxConcurrent)}
+	consumer := &Consumer{
+		service: s, ffmpeg: ffmpeg.New(cfg), config: cfg, client: client,
+		ctx: ctx, cancel: cancel, slots: make(chan struct{}, ffmpeg.DefaultMaxConcurrent),
+	}
+	s.logger.Info("视频转码消费者初始化完成", "max_concurrent", ffmpeg.DefaultMaxConcurrent, "threads", ffmpeg.DefaultThreads)
 	if err := client.Subscribe(mq.VideoTranscodeTopic, "*", consumer.handle); err != nil {
 		cancel()
 		return nil, errors.Join(err, client.Close())
@@ -116,7 +122,7 @@ func (c *Consumer) handle(messageCtx context.Context, msg rocketmq.Message) erro
 	workErr := c.service.invalidate(ctx, row.BVID)
 	if workErr == nil {
 		// 下载、读取视频信息、生成封面与 HLS。
-		p, workErr = c.transcode(ctx, row, p)
+		p, workErr = c.transcode(root, ctx, row, p)
 	}
 	permanent := errors.Is(workErr, ffmpeg.ErrInvalidMedia) || errors.Is(workErr, minio.ErrObjectNotFound)
 	canceled := workErr != nil && root.Err() != nil
@@ -137,47 +143,73 @@ func (c *Consumer) handle(messageCtx context.Context, msg rocketmq.Message) erro
 	return nil
 }
 
-func (c *Consumer) transcode(ctx context.Context, row video, p part) (result part, err error) {
+func (c *Consumer) transcode(root, baseCtx context.Context, row video, p part) (result part, err error) {
 	dir, err := os.MkdirTemp(c.config.WorkDir, "part-"+fmt.Sprint(p.ID)+"-")
 	if err != nil {
 		return p, err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(dir)) }()
 	input := filepath.Join(dir, "source")
-	if err := c.service.objects.DownloadFile(ctx, p.RawKey, input); err != nil {
+	if err := c.service.objects.DownloadFile(baseCtx, p.RawKey, input); err != nil {
 		return p, err
 	}
-	meta, err := c.ffmpeg.Probe(ctx, input)
+	meta, err := c.ffmpeg.Probe(baseCtx, input)
 	if err != nil {
 		return p, err
+	}
+	workCtx := baseCtx
+	required := max(c.config.TaskTimeout, time.Duration(meta.DurationSec)*2*time.Second)
+	if required > c.config.TaskTimeout {
+		var cancel context.CancelFunc
+		workCtx, cancel = context.WithTimeout(root, required)
+		defer cancel()
+		if err := c.service.extendJobLease(workCtx, p, required); err != nil {
+			return p, err
+		}
 	}
 	// 作者没有指定封面时，使用视频画面并按条件回写。
 	if row.CoverURL == "" {
-		if err := c.automaticCover(ctx, dir, input, row, meta.DurationSec); err != nil {
+		if err := c.automaticCover(workCtx, dir, input, row, meta.DurationSec); err != nil {
 			return p, err
 		}
 	}
-	qualities, err := c.ffmpeg.TranscodeHLS(ctx, input, dir, meta, c.config.Threads)
+	qualities := ffmpeg.PlannedQualities(meta)
+	if len(qualities) == 0 {
+		p.Duration = meta.DurationSec
+		return p, nil
+	}
+	// 原画清晰度优先流拷贝切片，随后合并生成其余低清晰度，全部完成后统一入库发布。
+	if err := c.ffmpeg.TranscodeQuality(workCtx, input, dir, meta, qualities[0], ffmpeg.DefaultThreads); err != nil {
+		return p, err
+	}
+	primaryURL, err := c.uploadQuality(workCtx, dir, p, qualities[0].Name)
 	if err != nil {
 		return p, err
 	}
-	// 分片先上传，播放列表最后公开。
-	for _, quality := range qualities {
-		url, err := c.uploadQuality(ctx, dir, p, quality.Name)
+	assignQualityURL(&p, qualities[0].Name, primaryURL)
+	if err := c.ffmpeg.TranscodeLowerQualities(workCtx, input, dir, meta, qualities[1:], ffmpeg.DefaultThreads); err != nil {
+		return p, err
+	}
+	for _, quality := range qualities[1:] {
+		url, err := c.uploadQuality(workCtx, dir, p, quality.Name)
 		if err != nil {
 			return p, err
 		}
-		switch quality.Name {
-		case "1080p":
-			p.HLS1080 = &url
-		case "720p":
-			p.HLS720 = &url
-		case "480p":
-			p.HLS480 = &url
-		}
+		assignQualityURL(&p, quality.Name, url)
 	}
 	p.Duration = meta.DurationSec
 	return p, nil
+}
+
+func assignQualityURL(p *part, quality, url string) {
+	switch quality {
+	case "1080p":
+		p.HLS1080 = &url
+	case "720p":
+		p.HLS720 = &url
+	case "480p":
+		p.HLS480 = &url
+	}
 }
 
 func (c *Consumer) automaticCover(ctx context.Context, dir, input string, row video, duration int) error {
@@ -202,13 +234,19 @@ func (c *Consumer) uploadQuality(ctx context.Context, dir string, p part, qualit
 		return "", err
 	}
 	prefix := fmt.Sprintf("hls/%d/%d/%s/", p.VideoID, p.ID, quality)
+	group, uploadCtx := errgroup.WithContext(ctx)
+	group.SetLimit(8)
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".ts" {
 			continue
 		}
-		if err := c.putFile(ctx, filepath.Join(local, entry.Name()), prefix+entry.Name(), "video/mp2t"); err != nil {
-			return "", err
-		}
+		name := entry.Name()
+		group.Go(func() error {
+			return c.putFile(uploadCtx, filepath.Join(local, name), prefix+name, "video/mp2t")
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return "", err
 	}
 	key := prefix + "index.m3u8"
 	if err := c.putFile(ctx, filepath.Join(local, "index.m3u8"), key, "application/vnd.apple.mpegurl"); err != nil {

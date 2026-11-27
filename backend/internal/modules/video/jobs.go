@@ -168,3 +168,7 @@ func (s *Service) completeJob(ctx context.Context, row video, p part, workErr er
 	}
 	return nil
 }
+
+func (s *Service) extendJobLease(ctx context.Context, p part, timeout time.Duration) error {
+	return s.store.extendPartLease(ctx, p, time.Now().UTC().Add(timeout+30*time.Second))
+}

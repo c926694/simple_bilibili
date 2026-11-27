@@ -19,6 +19,7 @@ type Config struct {
 	RocketMQ RocketMQ `mapstructure:"rocketmq"`
 	JWT      JWT      `mapstructure:"jwt"`
 	FFmpeg   FFmpeg   `mapstructure:"ffmpeg"`
+	Upload   Upload   `mapstructure:"upload"`
 }
 
 type App struct {
@@ -66,12 +67,16 @@ type JWT struct {
 }
 
 type FFmpeg struct {
-	Binary        string        `mapstructure:"binary" validate:"required"`
-	ProbeBinary   string        `mapstructure:"probe_binary" validate:"required"`
-	WorkDir       string        `mapstructure:"work_dir" validate:"required"`
-	MaxConcurrent int           `mapstructure:"max_concurrent" validate:"gte=1,lte=8"`
-	Threads       int           `mapstructure:"threads" validate:"gte=1,lte=16"`
-	TaskTimeout   time.Duration `mapstructure:"task_timeout" validate:"gt=0"`
+	Binary      string        `mapstructure:"binary" validate:"required"`
+	ProbeBinary string        `mapstructure:"probe_binary" validate:"required"`
+	WorkDir     string        `mapstructure:"work_dir" validate:"required"`
+	TaskTimeout time.Duration `mapstructure:"task_timeout" validate:"gt=0"`
+}
+
+type Upload struct {
+	CleanupInterval  time.Duration `mapstructure:"cleanup_interval" validate:"gt=0"`
+	TaskExpireAfter  time.Duration `mapstructure:"task_expire_after" validate:"gt=0"`
+	CleanupBatchSize int           `mapstructure:"cleanup_batch_size" validate:"gte=1,lte=1000"`
 }
 
 func Load(path string) (Config, error) {
@@ -82,9 +87,10 @@ func Load(path string) (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AllowEmptyEnv(true)
 	v.AutomaticEnv()
-	v.SetDefault("ffmpeg.max_concurrent", 1)
-	v.SetDefault("ffmpeg.threads", 2)
 	v.SetDefault("ffmpeg.task_timeout", "10m")
+	v.SetDefault("upload.cleanup_interval", "1h")
+	v.SetDefault("upload.task_expire_after", "24h")
+	v.SetDefault("upload.cleanup_batch_size", 100)
 
 	if err := v.ReadInConfig(); err != nil {
 		return Config{}, fmt.Errorf("读取配置文件 %q: %w", path, err)

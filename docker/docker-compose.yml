@@ -177,8 +177,6 @@ services:
       BILIBILI_ROCKETMQ_NAME_SERVERS: rmqnamesrv:9876
       BILIBILI_JWT_SECRET: ${JWT_SECRET:-docker_dev_jwt_secret_please_replace_in_prod}
       BILIBILI_FFMPEG_WORK_DIR: /app/data/transcode-tmp
-      BILIBILI_FFMPEG_MAX_CONCURRENT: ${FFMPEG_MAX_CONCURRENT:-1}
-      BILIBILI_FFMPEG_THREADS: ${FFMPEG_THREADS:-2}
       BILIBILI_FFMPEG_TASK_TIMEOUT: ${FFMPEG_TASK_TIMEOUT:-10m}
     ports:
       - "${BACKEND_PORT:-8080}:8080"

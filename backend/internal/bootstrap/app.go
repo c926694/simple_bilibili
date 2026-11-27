@@ -88,7 +88,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	appLogger := logger.New(cfg.App.Mode)
 	hub := ws.NewHub()
 	return &App{
-		Modules:   NewModules(db, client, objects, producer, tokens, ids, appLogger, hub),
+		Modules:   NewModules(db, client, objects, producer, tokens, ids, appLogger, hub, cfg.Upload),
 		config:    cfg.App,
 		ffmpeg:    cfg.FFmpeg,
 		messaging: cfg.RocketMQ,

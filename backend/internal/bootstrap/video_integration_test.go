@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net"
 	"net/http"
@@ -77,7 +79,6 @@ func TestVideoIntegration(t *testing.T) {
 	cfg.MinIO.PublicEndpoint = testUploadProxy(t, cfg.MinIO)
 	cfg.MinIO.PublicSecure = false
 	cfg.FFmpeg.WorkDir = filepath.Join(t.TempDir(), "transcode")
-	cfg.FFmpeg.MaxConcurrent = 2
 	cfg.FFmpeg.TaskTimeout = 40 * time.Second
 	probe, err := exec.LookPath(cfg.FFmpeg.ProbeBinary)
 	if err != nil {
@@ -310,6 +311,8 @@ func TestVideoIntegration(t *testing.T) {
 	if mine.Total != 1 || mine.Items[0].BVID != full.BVID {
 		t.Fatalf("按状态查询稿件不符: %+v", mine)
 	}
+	// 验证投稿封面从 tmp/ 转正、更换封面清理旧封面以及定时清理过期上传任务。
+	verifyCoverPromotionAndUploadCleanup(t, cfg, app, objects, c, access, userID, low)
 }
 
 func waitTranscodeAttempt(t *testing.T, app *App, partID string, want int) {
@@ -422,4 +425,99 @@ func checkVideoObject(t *testing.T, cfg config.MinIO, objects *miniogo.Client, p
 		t.Fatal(err)
 	}
 	return body.String()
+}
+
+func verifyCoverPromotionAndUploadCleanup(t *testing.T, cfg config.Config, app *App, objects *miniogo.Client, c userIntegration, access, userID string, sample []byte) {
+	t.Helper()
+	var pngBuf bytes.Buffer
+	if err := png.Encode(&pngBuf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	var cover1 signedImage
+	c.call(t, http.MethodPost, uploadsURL+"/image-presign", access, map[string]any{
+		"biz_type": "cover", "content_type": "image/png", "file_size": pngBuf.Len(),
+	}, 0, &cover1)
+	c.putPresigned(t, cover1.UploadURL, cover1.Headers, pngBuf.Bytes())
+
+	taskID := c.uploadVideoSample(t, access, "cover-test.mp4", sample)
+	var created integrationVideo
+	c.call(t, http.MethodPost, videosURL, access, map[string]any{
+		"title":          "封面转正验证",
+		"category_id":    1,
+		"cover_url":      cover1.PublicURL,
+		"upload_task_id": taskID,
+	}, 0, &created)
+	wantCover1 := strings.Replace(cover1.PublicURL, "/storage/tmp/", "/storage/", 1)
+	if created.CoverURL != wantCover1 {
+		t.Fatalf("封面未转正: got %q, want %q", created.CoverURL, wantCover1)
+	}
+	if _, err := objects.StatObject(t.Context(), cfg.MinIO.Bucket, cover1.ObjectKey, miniogo.StatObjectOptions{}); miniogo.ToErrorResponse(err).Code != "NoSuchKey" {
+		t.Fatalf("临时封面对象未删除: %v", err)
+	}
+	checkVideoObject(t, cfg.MinIO, objects, created.CoverURL, "image/png")
+
+	var cover2 signedImage
+	c.call(t, http.MethodPost, uploadsURL+"/image-presign", access, map[string]any{
+		"biz_type": "cover", "content_type": "image/png", "file_size": pngBuf.Len(),
+	}, 0, &cover2)
+	c.putPresigned(t, cover2.UploadURL, cover2.Headers, pngBuf.Bytes())
+	var edited integrationVideo
+	c.call(t, http.MethodPut, videosURL+"/"+created.BVID, access, map[string]any{
+		"cover_url": cover2.PublicURL,
+	}, 0, &edited)
+	wantCover2 := strings.Replace(cover2.PublicURL, "/storage/tmp/", "/storage/", 1)
+	if edited.CoverURL != wantCover2 {
+		t.Fatalf("编辑封面未转正: got %q, want %q", edited.CoverURL, wantCover2)
+	}
+	if _, err := objects.StatObject(t.Context(), cfg.MinIO.Bucket, strings.TrimPrefix(wantCover1, "/storage/"), miniogo.StatObjectOptions{}); miniogo.ToErrorResponse(err).Code != "NoSuchKey" {
+		t.Fatalf("更换封面后旧封面未删除: %v", err)
+	}
+
+	// 准备三个过期任务：1) 超期未完成 2) 超期未投稿原文件 3) 已有稿件引用的超期任务（不可删除）。
+	var staleUploading videoTask
+	c.call(t, http.MethodPost, uploadsURL+"/video/init", access, map[string]any{
+		"file_name": "stale-uploading.mp4", "file_hash": fmt.Sprintf("%x", sha256.Sum256([]byte("stale-uploading-data"))), "file_size": 1024,
+	}, 0, &staleUploading)
+
+	orphanBytes := []byte("orphan-raw-video-content")
+	orphanID := c.uploadVideoSample(t, access, "orphan.mp4", orphanBytes)
+	var orphanKey string
+	if err := app.db.GetContext(t.Context(), &orphanKey, "SELECT object_key FROM upload_task WHERE id = ?", orphanID); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTime := time.Now().UTC().Add(-48 * time.Hour)
+	for _, tid := range []string{staleUploading.ID, orphanID, taskID} {
+		if _, err := app.db.ExecContext(t.Context(), "UPDATE upload_task SET updated_at = ? WHERE id = ?", oldTime, tid); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := app.Modules.Upload.CleanupOnce(t.Context(), app.Modules.Video.ReferencedRawKeys); err != nil {
+		t.Fatalf("执行定时清理失败: %v", err)
+	}
+
+	var staleStatus, orphanStatus, referencedStatus int
+	if err := app.db.GetContext(t.Context(), &staleStatus, "SELECT status FROM upload_task WHERE id = ?", staleUploading.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.db.GetContext(t.Context(), &orphanStatus, "SELECT status FROM upload_task WHERE id = ?", orphanID); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.db.GetContext(t.Context(), &referencedStatus, "SELECT status FROM upload_task WHERE id = ?", taskID); err != nil {
+		t.Fatal(err)
+	}
+	if staleStatus != 2 || orphanStatus != 2 || referencedStatus != 1 {
+		t.Fatalf("清理后任务状态不符: stale=%d orphan=%d referenced=%d", staleStatus, orphanStatus, referencedStatus)
+	}
+	if _, err := objects.StatObject(t.Context(), cfg.MinIO.Bucket, orphanKey, miniogo.StatObjectOptions{}); miniogo.ToErrorResponse(err).Code != "NoSuchKey" {
+		t.Fatalf("未投稿的过期原视频未被删除: %v", err)
+	}
+	var referencedKey string
+	if err := app.db.GetContext(t.Context(), &referencedKey, "SELECT object_key FROM upload_task WHERE id = ?", taskID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := objects.StatObject(t.Context(), cfg.MinIO.Bucket, referencedKey, miniogo.StatObjectOptions{}); err != nil {
+		t.Fatalf("已被稿件引用的原始视频不应被删除: %v", err)
+	}
 }

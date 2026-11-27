@@ -74,7 +74,8 @@ export function UploadPage() {
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [coverUrl, setCoverUrl] = useState('')
-  const [coverUploading, setCoverUploading] = useState(false)
+  const [pendingCoverFile, setPendingCoverFile] = useState<File | null>(null)
+  const [pendingCoverPreview, setPendingCoverPreview] = useState<string | null>(null)
   const [coverNotice, setCoverNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null,
   )
@@ -99,6 +100,8 @@ export function UploadPage() {
   const [editCategoryId, setEditCategoryId] = useState<number>(0)
   const [editDescription, setEditDescription] = useState('')
   const [editCoverUrl, setEditCoverUrl] = useState('')
+  const [editPendingCoverFile, setEditPendingCoverFile] = useState<File | null>(null)
+  const [editPendingCoverPreview, setEditPendingCoverPreview] = useState<string | null>(null)
   const [editTagsInput, setEditTagsInput] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
@@ -163,15 +166,60 @@ export function UploadPage() {
     return () => window.clearInterval(timer)
   }, [activeTab, hasProcessing, loadMyVideos])
 
-  const openEditor = useCallback((video: VideoDetail) => {
-    setEditingBvid(video.bv_id)
-    setEditTitle(video.title)
-    setEditCategoryId(video.category?.id ?? 0)
-    setEditDescription(video.description || '')
-    setEditCoverUrl(video.cover_url || '')
-    setEditTagsInput((video.tags || []).join(', '))
-    setManageNotice(null)
+  useEffect(() => {
+    return () => {
+      if (pendingCoverPreview) {
+        URL.revokeObjectURL(pendingCoverPreview)
+      }
+    }
+  }, [pendingCoverPreview])
+
+  useEffect(() => {
+    return () => {
+      if (editPendingCoverPreview) {
+        URL.revokeObjectURL(editPendingCoverPreview)
+      }
+    }
+  }, [editPendingCoverPreview])
+
+  const clearPendingCover = useCallback(() => {
+    setPendingCoverFile(null)
+    setPendingCoverPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return null
+    })
   }, [])
+
+  const clearEditPendingCover = useCallback(() => {
+    setEditPendingCoverFile(null)
+    setEditPendingCoverPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return null
+    })
+  }, [])
+
+  const closeEditor = useCallback(() => {
+    clearEditPendingCover()
+    setEditingBvid('')
+  }, [clearEditPendingCover])
+
+  const openEditor = useCallback(
+    (video: VideoDetail) => {
+      clearEditPendingCover()
+      setEditingBvid(video.bv_id)
+      setEditTitle(video.title)
+      setEditCategoryId(video.category?.id ?? 0)
+      setEditDescription(video.description || '')
+      setEditCoverUrl(video.cover_url || '')
+      setEditTagsInput((video.tags || []).join(', '))
+      setManageNotice(null)
+    },
+    [clearEditPendingCover],
+  )
 
   useEffect(() => {
     if (activeTab === 'manage' && editBvidParam && myVideos.length > 0 && !editingBvid) {
@@ -285,59 +333,58 @@ export function UploadPage() {
     setVideoError('')
   }
 
-  const handleUploadCover = async (
-    file: File,
-    onDone: (publicUrl: string) => void,
-    setBusy: (v: boolean) => void,
-  ) => {
+  const validateCoverFile = (file: File): string | null => {
     if (!ALLOWED_COVER_TYPES.includes(file.type)) {
-      setCoverNotice({ type: 'error', text: '封面仅支持 JPG、PNG、WebP 或 GIF 图片' })
-      return
+      return '封面仅支持 JPG、PNG、WebP 或 GIF 图片'
     }
     if (file.size > MAX_COVER_BYTES) {
-      setCoverNotice({ type: 'error', text: '封面图片大小不能超过 5MB' })
-      return
+      return '封面图片大小不能超过 5MB'
     }
-    setCoverNotice(null)
-    setBusy(true)
-    try {
-      const res = await uploadApi.uploadImageDirect('cover', file)
-      onDone(res.public_url)
-      setCoverNotice({ type: 'success', text: '封面上传成功' })
-    } catch (err) {
-      setCoverNotice({
-        type: 'error',
-        text: err instanceof ApiError ? err.message : '封面上传失败',
-      })
-    } finally {
-      setBusy(false)
-    }
+    return null
   }
 
-  const handleCoverFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (file) {
-      await handleUploadCover(file, setCoverUrl, setCoverUploading)
-    }
-  }
-
-  const handleEditCoverChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) {
       return
     }
-    try {
-      const res = await uploadApi.uploadImageDirect('cover', file)
-      setEditCoverUrl(res.public_url)
-      setManageNotice({ type: 'success', text: '新封面已上传，请点击保存生效' })
-    } catch (err) {
-      setManageNotice({
-        type: 'error',
-        text: err instanceof ApiError ? err.message : '封面上传失败',
-      })
+    const err = validateCoverFile(file)
+    if (err) {
+      setCoverNotice({ type: 'error', text: err })
+      return
     }
+    const previewUrl = URL.createObjectURL(file)
+    setPendingCoverFile(file)
+    setPendingCoverPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return previewUrl
+    })
+    setCoverNotice({ type: 'success', text: `已选择封面：${file.name}（点击立即投稿时上传生效）` })
+  }
+
+  const handleEditCoverChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    const err = validateCoverFile(file)
+    if (err) {
+      setManageNotice({ type: 'error', text: err })
+      return
+    }
+    const previewUrl = URL.createObjectURL(file)
+    setEditPendingCoverFile(file)
+    setEditPendingCoverPreview((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return previewUrl
+    })
+    setManageNotice({ type: 'success', text: `已选择新封面：${file.name}（点击保存修改生效）` })
   }
 
   const addTagFromInput = () => {
@@ -389,11 +436,16 @@ export function UploadPage() {
 
     setSubmitting(true)
     try {
+      let finalCoverUrl = coverUrl
+      if (pendingCoverFile) {
+        const uploadedCover = await uploadApi.uploadImageDirect('cover', pendingCoverFile)
+        finalCoverUrl = uploadedCover.public_url
+      }
       const created = await videoApi.createVideo({
         title: trimmedTitle,
         description: description.trim() || undefined,
         category_id: categoryId,
-        cover_url: coverUrl || undefined,
+        cover_url: finalCoverUrl || undefined,
         tags,
         upload_task_id: uploadedFile.uploadTaskId,
       })
@@ -405,6 +457,7 @@ export function UploadPage() {
       setDescription('')
       setTags([])
       setTagInput('')
+      clearPendingCover()
       setCoverUrl('')
       setCoverNotice(null)
       setManageNotice({
@@ -442,14 +495,19 @@ export function UploadPage() {
             .filter(Boolean),
         ),
       ).slice(0, 10)
+      let finalCoverUrl = editCoverUrl
+      if (editPendingCoverFile) {
+        const uploadedCover = await uploadApi.uploadImageDirect('cover', editPendingCoverFile)
+        finalCoverUrl = uploadedCover.public_url
+      }
       await videoApi.updateVideo(editingBvid, {
         title: editTitle.trim(),
         description: editDescription.trim(),
         category_id: editCategoryId,
-        cover_url: editCoverUrl || undefined,
+        cover_url: finalCoverUrl || undefined,
         tags: parsedTags,
       })
-      setEditingBvid('')
+      closeEditor()
       setManageNotice({ type: 'success', text: '视频信息已更新' })
       await loadMyVideos(false)
     } catch (err) {
@@ -608,7 +666,7 @@ export function UploadPage() {
                         <span className="upload-badge upload-badge--blue">断点续传</span>
                       )}
                       {progress.phase === 'completed' ? (
-                        <span className="upload-badge upload-badge--green">已上传完成</span>
+                        <span className="upload-badge upload-badge--green">视频文件已就绪</span>
                       ) : (
                         <span className="upload-badge upload-badge--blue">{displayPercent}%</span>
                       )}
@@ -674,8 +732,8 @@ export function UploadPage() {
                   <label className="video-form__label">封面</label>
                   <div className="upload-cover-row">
                     <div className="upload-cover-preview">
-                      {coverUrl ? (
-                        <img src={coverUrl} alt="视频封面预览" />
+                      {pendingCoverPreview || coverUrl ? (
+                        <img src={pendingCoverPreview || coverUrl} alt="视频封面预览" />
                       ) : (
                         <span>未设置（自动截取视频帧）</span>
                       )}
@@ -694,15 +752,19 @@ export function UploadPage() {
                           type="button"
                           className="upload-secondary-btn"
                           onClick={() => coverInputRef.current?.click()}
-                          disabled={coverUploading}
+                          disabled={submitting}
                         >
-                          {coverUploading ? '正在上传封面...' : '上传封面'}
+                          选择封面
                         </button>
-                        {coverUrl && (
+                        {(pendingCoverPreview || coverUrl) && (
                           <button
                             type="button"
                             className="upload-secondary-btn"
-                            onClick={() => setCoverUrl('')}
+                            onClick={() => {
+                              clearPendingCover()
+                              setCoverUrl('')
+                              setCoverNotice(null)
+                            }}
                           >
                             恢复自动截取
                           </button>
@@ -954,7 +1016,7 @@ export function UploadPage() {
                             <button
                               type="button"
                               className="upload-secondary-btn"
-                              onClick={() => (isEditing ? setEditingBvid('') : openEditor(item))}
+                              onClick={() => (isEditing ? closeEditor() : openEditor(item))}
                             >
                               {isEditing ? '收起' : '编辑'}
                             </button>
@@ -1014,6 +1076,7 @@ export function UploadPage() {
                                     accept="image/jpeg,image/png,image/webp,image/gif"
                                     onChange={handleEditCoverChange}
                                     style={{ display: 'none' }}
+                                    aria-label="选择编辑视频封面图片"
                                   />
                                   <button
                                     type="button"
@@ -1023,7 +1086,11 @@ export function UploadPage() {
                                     更换封面
                                   </button>
                                   <span className="upload-header__sub">
-                                    {editCoverUrl ? '已设置封面' : '默认封面'}
+                                    {editPendingCoverFile
+                                      ? `待保存：${editPendingCoverFile.name}`
+                                      : editCoverUrl
+                                        ? '已设置封面'
+                                        : '默认封面'}
                                   </span>
                                 </div>
                               </div>
@@ -1050,7 +1117,7 @@ export function UploadPage() {
                               <button
                                 type="button"
                                 className="upload-secondary-btn"
-                                onClick={() => setEditingBvid('')}
+                                onClick={closeEditor}
                               >
                                 取消
                               </button>

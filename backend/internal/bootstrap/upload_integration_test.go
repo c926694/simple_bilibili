@@ -83,25 +83,50 @@ func (c userIntegration) verifyAvatarUpload(t *testing.T, cfg config.MinIO, obje
 	c.call(t, http.MethodPost, path, access, input, 0, &signed)
 	if signed.ExpiresIn != 300 || signed.Headers["Content-Type"] != "image/png" ||
 		!strings.HasPrefix(signed.UploadURL, "http://"+cfg.PublicEndpoint+"/"+cfg.Bucket+"/") ||
-		!strings.HasPrefix(signed.ObjectKey, "avatars/"+userID+"/") || signed.PublicURL != "/storage/"+signed.ObjectKey {
+		!strings.HasPrefix(signed.ObjectKey, "tmp/avatars/"+userID+"/") || signed.PublicURL != "/storage/"+signed.ObjectKey {
 		t.Fatalf("头像预签名响应不符: %+v", signed)
 	}
 	update := map[string]string{"nickname": "新昵称", "avatar_url": signed.PublicURL}
 	c.call(t, http.MethodPut, usersURL+"/me", access, update, 10001, nil)
 	c.putPresigned(t, signed.UploadURL, signed.Headers, pngFile.Bytes())
+	// 临时图片前缀不可匿名公开读取。
+	privRes, err := c.client.Get("http://" + cfg.PublicEndpoint + "/" + cfg.Bucket + "/" + signed.ObjectKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privRes.Body.Close()
+	if privRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("临时目录应拒绝匿名读取，返回 HTTP %d", privRes.StatusCode)
+	}
 	c.call(t, http.MethodPut, usersURL+"/me", otherAccess, update, 10001, nil)
 
 	var saved integrationProfile
 	c.call(t, http.MethodPut, usersURL+"/me", access, update, 0, &saved)
-	if saved.AvatarURL != signed.PublicURL || saved.ID != userID {
-		t.Fatalf("保存头像后的用户资料不符: %+v", saved)
+	wantAvatarURL := strings.Replace(signed.PublicURL, "/storage/tmp/", "/storage/", 1)
+	if saved.AvatarURL != wantAvatarURL || saved.ID != userID {
+		t.Fatalf("保存头像后的用户资料不符: %+v，期望 %q", saved, wantAvatarURL)
 	}
+	if _, err := objects.StatObject(t.Context(), cfg.Bucket, signed.ObjectKey, miniogo.StatObjectOptions{}); miniogo.ToErrorResponse(err).Code != "NoSuchKey" {
+		t.Fatalf("转正后临时头像对象应已删除，查询返回 %v", err)
+	}
+
+	// 再次更换头像，旧正式头像应被清理。
+	var secondSigned signedImage
+	c.call(t, http.MethodPost, path, access, input, 0, &secondSigned)
+	c.putPresigned(t, secondSigned.UploadURL, secondSigned.Headers, pngFile.Bytes())
+	var secondSaved integrationProfile
+	c.call(t, http.MethodPut, usersURL+"/me", access, map[string]string{"nickname": "新昵称", "avatar_url": secondSigned.PublicURL}, 0, &secondSaved)
+	oldAvatarKey := strings.TrimPrefix(saved.AvatarURL, "/storage/")
+	if _, err := objects.StatObject(t.Context(), cfg.Bucket, oldAvatarKey, miniogo.StatObjectOptions{}); miniogo.ToErrorResponse(err).Code != "NoSuchKey" {
+		t.Fatalf("更换新头像后旧头像应已删除，查询返回 %v", err)
+	}
+
 	for biz, prefix := range map[string]string{"cover": "covers", "dynamic": "dynamics"} {
 		var extra signedImage
 		c.call(t, http.MethodPost, path, access, map[string]any{
 			"biz_type": biz, "content_type": "image/png", "file_size": pngFile.Len(),
 		}, 0, &extra)
-		if !strings.HasPrefix(extra.ObjectKey, prefix+"/"+userID+"/") {
+		if !strings.HasPrefix(extra.ObjectKey, "tmp/"+prefix+"/"+userID+"/") {
 			t.Fatalf("图片目标目录不符: %s", extra.ObjectKey)
 		}
 		c.putPresigned(t, extra.UploadURL, extra.Headers, pngFile.Bytes())
@@ -119,8 +144,8 @@ func (c userIntegration) verifyAvatarUpload(t *testing.T, cfg config.MinIO, obje
 		t.Fatalf("核验失败的对象应已删除，查询返回 %v", err)
 	}
 	c.call(t, http.MethodGet, usersURL+"/me", access, nil, 0, &saved)
-	if saved.AvatarURL != signed.PublicURL {
-		t.Fatalf("数据库头像地址为 %q，期望 %q", saved.AvatarURL, signed.PublicURL)
+	if saved.AvatarURL != secondSaved.AvatarURL {
+		t.Fatalf("数据库头像地址为 %q，期望 %q", saved.AvatarURL, secondSaved.AvatarURL)
 	}
 }
 

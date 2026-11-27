@@ -167,7 +167,7 @@ export class VideoMultipartUploader {
 
     if (init.instant) {
       this.uploadedBytes = this.file.size
-      this.emit('completed', '命中全站秒传，视频已极速上传完成', 100, true)
+      this.emit('completed', '命中全站秒传，视频文件已就绪，请填写信息后点击立即投稿', 100, true)
       return {
         task_id: init.task_id,
         object_key: init.object_key,
@@ -258,7 +258,7 @@ export class VideoMultipartUploader {
       .map(([part_number, etag]) => ({ part_number, etag }))
 
     const done = await uploadApi.completeVideoUpload(this.taskId, parts)
-    this.emit('completed', '视频上传并合并完成，请完善稿件信息后提交投稿', 100)
+    this.emit('completed', '视频文件已就绪，请填写信息后点击立即投稿', 100)
     return done
   }
 

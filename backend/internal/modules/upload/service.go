@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/pkg/errcode"
@@ -19,18 +22,39 @@ const (
 	partExpiry  = 15 * time.Minute
 )
 
+type CleanupConfig struct {
+	Interval  time.Duration
+	ExpireAge time.Duration
+	BatchSize int
+}
+
 type Service struct {
 	store   *Store
 	objects *minio.Client
+	redis   *redis.Client
 	ids     *snowflake.Generator
+	logger  *slog.Logger
+	cleanup CleanupConfig
 }
 
-func NewService(store *Store, objects *minio.Client, ids *snowflake.Generator) *Service {
-	return &Service{store: store, objects: objects, ids: ids}
+func NewService(store *Store, objects *minio.Client, redisClient *redis.Client, ids *snowflake.Generator, logger *slog.Logger, cleanup CleanupConfig) *Service {
+	if cleanup.Interval <= 0 {
+		cleanup.Interval = time.Hour
+	}
+	if cleanup.ExpireAge <= 0 {
+		cleanup.ExpireAge = 24 * time.Hour
+	}
+	if cleanup.BatchSize <= 0 {
+		cleanup.BatchSize = 100
+	}
+	return &Service{
+		store: store, objects: objects, redis: redisClient,
+		ids: ids, logger: logger, cleanup: cleanup,
+	}
 }
 
 func (s *Service) ImagePresign(ctx context.Context, userID int64, prefix, extension, contentType string) (imageResponse, error) {
-	key := fmt.Sprintf("%s/%d/%d.%s", prefix, userID, s.ids.Next(), extension)
+	key := fmt.Sprintf("tmp/%s/%d/%d.%s", prefix, userID, s.ids.Next(), extension)
 	url, err := s.objects.PresignPutObject(ctx, key, contentType, imageExpiry)
 	if err != nil {
 		return imageResponse{}, err

@@ -96,7 +96,7 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &applied, "SELECT version FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql", "0004_danmaku_stat_delivery.up.sql", "0005_interaction_checkin_outbox.up.sql"}
+	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql", "0004_danmaku_stat_delivery.up.sql", "0005_interaction_checkin_outbox.up.sql", "0006_upload_cleanup_indexes.up.sql"}
 	if !slices.Equal(applied, versions) {
 		t.Fatalf("迁移版本为 %v", applied)
 	}

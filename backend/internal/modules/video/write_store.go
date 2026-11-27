@@ -116,6 +116,33 @@ func (s *Store) setAutomaticCover(ctx context.Context, id int64, url string) err
 	return nil
 }
 
+func (s *Store) countCoverRefs(ctx context.Context, coverURL string) (int64, error) {
+	var count int64
+	if err := s.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM video WHERE cover_url = ?", coverURL); err != nil {
+		return 0, fmt.Errorf("统计封面引用数: %w", err)
+	}
+	return count, nil
+}
+
+func (s *Store) referencedRawKeys(ctx context.Context, keys []string) (map[string]bool, error) {
+	referenced := make(map[string]bool)
+	if len(keys) == 0 {
+		return referenced, nil
+	}
+	query, args, err := sqlx.In("SELECT DISTINCT raw_object_key FROM video_part WHERE raw_object_key IN (?)", keys)
+	if err != nil {
+		return nil, fmt.Errorf("构造分 P 原始对象批量查询: %w", err)
+	}
+	var found []string
+	if err := sqlx.SelectContext(ctx, tx.Executor(ctx, s.db), &found, s.db.Rebind(query), args...); err != nil {
+		return nil, fmt.Errorf("批量查询分 P 引用的原始对象: %w", err)
+	}
+	for _, key := range found {
+		referenced[key] = true
+	}
+	return referenced, nil
+}
+
 func summarize(row *video, parts []part, now time.Time) {
 	var failed, pending bool
 	row.DurationSec = 0

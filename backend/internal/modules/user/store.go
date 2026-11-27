@@ -118,6 +118,14 @@ func (s *Store) updateProfile(ctx context.Context, userID int64, input profileIn
 	return nil
 }
 
+func (s *Store) countAvatarRefs(ctx context.Context, avatarURL string) (int64, error) {
+	var count int64
+	if err := s.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM user WHERE avatar_url = ?", avatarURL); err != nil {
+		return 0, fmt.Errorf("统计头像引用数: %w", err)
+	}
+	return count, nil
+}
+
 func (s *Store) passwordForUpdate(ctx context.Context, userID int64) (string, error) {
 	var hash string
 	err := sqlx.GetContext(ctx, tx.Executor(ctx, s.db), &hash, "SELECT password_hash FROM user WHERE id = ? FOR UPDATE", userID)

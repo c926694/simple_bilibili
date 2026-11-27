@@ -35,3 +35,10 @@ func (s *Store) finishPart(ctx context.Context, p part) error {
 		WHERE id = ? AND transcode_job_id = ?`, p.Duration, p.HLS1080, p.HLS720, p.HLS480, p.Status, p.ID, p.JobID)
 	return err
 }
+
+func (s *Store) extendPartLease(ctx context.Context, p part, lease time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE video_part SET transcode_lease_until = ?
+		WHERE id = ? AND transcode_job_id = ? AND transcode_status = ?`,
+		lease, p.ID, p.JobID, partRunning)
+	return err
+}

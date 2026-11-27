@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"simple_bilibili/backend/internal/infra/minio"
 	"simple_bilibili/backend/internal/pkg/errcode"
 	"simple_bilibili/backend/internal/pkg/jwt"
+	"simple_bilibili/backend/internal/pkg/media"
 	"simple_bilibili/backend/internal/pkg/password"
 	"simple_bilibili/backend/internal/pkg/snowflake"
 )
@@ -22,10 +24,11 @@ type Service struct {
 	objects *minio.Client
 	tokens  *jwt.Manager
 	ids     *snowflake.Generator
+	logger  *slog.Logger
 }
 
-func NewService(store *Store, objects *minio.Client, tokens *jwt.Manager, ids *snowflake.Generator) *Service {
-	return &Service{store: store, objects: objects, tokens: tokens, ids: ids}
+func NewService(store *Store, objects *minio.Client, tokens *jwt.Manager, ids *snowflake.Generator, logger *slog.Logger) *Service {
+	return &Service{store: store, objects: objects, tokens: tokens, ids: ids, logger: logger}
 }
 
 func (s *Service) NicknamesByIDs(ctx context.Context, ids []int64) (map[int64]string, error) {
@@ -133,30 +136,57 @@ func (s *Service) Me(ctx context.Context, userID int64) (profileResponse, error)
 
 func (s *Service) UpdateProfile(ctx context.Context, userID int64, input profileInput) (profileResponse, error) {
 	var result profileResponse
+	var oldAvatar string
+	var promotedKey string
 	err := s.store.inTransaction(ctx, func(ctx context.Context) error {
-		if strings.HasPrefix(input.AvatarURL, "/storage/avatars/") {
-			current, err := s.Me(ctx, userID)
+		current, err := s.Me(ctx, userID)
+		if err != nil {
+			return err
+		}
+		oldAvatar = current.AvatarURL
+		if strings.HasPrefix(input.AvatarURL, "/storage/tmp/avatars/") {
+			promoted, err := s.promoteAvatar(ctx, userID, input.AvatarURL)
 			if err != nil {
 				return err
 			}
+			input.AvatarURL = promoted
+			if key, ok := media.PublicImageKey("avatars", promoted); ok {
+				promotedKey = key
+			}
+		} else if strings.HasPrefix(input.AvatarURL, "/storage/avatars/") && current.AvatarURL != input.AvatarURL {
 			// 只核验本次更换的直传头像。
-			if current.AvatarURL != input.AvatarURL {
-				if err := s.verifyAvatar(ctx, userID, input.AvatarURL); err != nil {
-					return err
-				}
+			if err := s.verifyAvatar(ctx, userID, input.AvatarURL); err != nil {
+				return err
 			}
 		}
 		if err := s.store.updateProfile(ctx, userID, input); err != nil {
 			return err
 		}
-		var err error
 		result, err = s.Me(ctx, userID)
 		return err
 	})
 	if err != nil {
+		if promotedKey != "" {
+			s.removeObjectQuietly(ctx, promotedKey, "回滚删除已转正头像失败")
+		}
 		return profileResponse{}, err
 	}
+	if oldAvatar != "" && oldAvatar != result.AvatarURL {
+		if oldKey, ok := media.PublicImageKey("avatars", oldAvatar); ok {
+			if refs, refErr := s.store.countAvatarRefs(ctx, oldAvatar); refErr == nil && refs == 0 {
+				s.removeObjectQuietly(ctx, oldKey, "删除旧头像失败")
+			}
+		}
+	}
 	return result, nil
+}
+
+func (s *Service) removeObjectQuietly(ctx context.Context, key, msg string) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := s.objects.RemoveObject(cleanupCtx, key); err != nil && !errors.Is(err, minio.ErrObjectNotFound) {
+		s.logger.WarnContext(ctx, msg, "object_key", key, "error", err)
+	}
 }
 
 func (s *Service) ChangePassword(ctx context.Context, access accessSession, input passwordInput) error {

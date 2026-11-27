@@ -105,3 +105,7 @@ func (s *Service) TitlesByIDs(ctx context.Context, ids []int64) (map[int64]strin
 	}
 	return titles, nil
 }
+
+func (s *Service) ReferencedRawKeys(ctx context.Context, keys []string) (map[string]bool, error) {
+	return s.store.referencedRawKeys(ctx, keys)
+}
