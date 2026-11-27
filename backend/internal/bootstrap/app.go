@@ -22,6 +22,7 @@ import (
 	"simple_bilibili/backend/internal/mq"
 	"simple_bilibili/backend/internal/pkg/jwt"
 	"simple_bilibili/backend/internal/pkg/snowflake"
+	"simple_bilibili/backend/internal/ws"
 	"simple_bilibili/backend/migrations"
 )
 
@@ -35,6 +36,7 @@ type App struct {
 	producer  *rocketmq.Producer
 	tokens    *jwt.Manager
 	logger    *slog.Logger
+	hub       *ws.Hub
 }
 
 func Run(serve func(*App, context.Context) error) (err error) {
@@ -84,8 +86,9 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	}
 	tokens := jwt.New(cfg.JWT)
 	appLogger := logger.New(cfg.App.Mode)
+	hub := ws.NewHub()
 	return &App{
-		Modules:   NewModules(db, client, objects, producer, tokens, ids, appLogger),
+		Modules:   NewModules(db, client, objects, producer, tokens, ids, appLogger, hub),
 		config:    cfg.App,
 		ffmpeg:    cfg.FFmpeg,
 		messaging: cfg.RocketMQ,
@@ -94,9 +97,11 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		producer:  producer,
 		tokens:    tokens,
 		logger:    appLogger,
+		hub:       hub,
 	}, nil
 }
 
 func (a *App) Close() error {
+	a.hub.Close()
 	return errors.Join(a.producer.Close(), a.redis.Close(), a.db.Close())
 }

@@ -1,11 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ApiError } from '../../api/client'
+import { ApiError, tokenStorage } from '../../api/client'
+import { buildVideoRoomWsUrl, DANMAKU_SEGMENT_MS, danmakuApi } from '../../api/danmaku'
 import { videoApi } from '../../api/video'
 import { BiliHeader } from '../../components/BiliHeader/BiliHeader'
+import { DanmakuBar } from '../../components/DanmakuBar/DanmakuBar'
+import { DanmakuLayer } from '../../components/DanmakuLayer/DanmakuLayer'
 import { HlsPlayer } from '../../components/HlsPlayer/HlsPlayer'
 import { UserAvatar } from '../../components/UserAvatar/UserAvatar'
 import { useAuth } from '../../context/AuthContext'
+import type {
+  DanmakuItem,
+  DanmakuStyleConfig,
+  VideoRoomWsMessage,
+} from '../../types/danmaku'
 import type { VideoDetail, VideoSummary } from '../../types/video'
 import {
   formatCount,
@@ -16,10 +24,27 @@ import {
 } from '../../utils/format'
 import './VideoPage.css'
 
+function mergeDanmakuItems(prev: DanmakuItem[], incoming: DanmakuItem[]): DanmakuItem[] {
+  const byId = new Map<string, DanmakuItem>()
+  for (const item of prev) {
+    byId.set(item.id, item)
+  }
+  for (const item of incoming) {
+    const existing = byId.get(item.id)
+    byId.set(item.id, existing?.isSelf ? { ...item, isSelf: true } : item)
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    if (a.time_offset_ms !== b.time_offset_ms) {
+      return a.time_offset_ms - b.time_offset_ms
+    }
+    return a.id.localeCompare(b.id)
+  })
+}
+
 export function VideoPage() {
   const { bvid } = useParams<{ bvid: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, openAuthModal } = useAuth()
 
   const [video, setVideo] = useState<VideoDetail | null>(null)
   const [related, setRelated] = useState<VideoSummary[]>([])
@@ -27,6 +52,28 @@ export function VideoPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
+
+  // 播放器状态与弹幕状态
+  const [playerTimeMs, setPlayerTimeMs] = useState(0)
+  const [playerPlaying, setPlayerPlaying] = useState(false)
+  const [playerRate, setPlayerRate] = useState(1)
+
+  const [danmakuEnabled, setDanmakuEnabled] = useState(true)
+  const [danmakuStyle, setDanmakuStyle] = useState<DanmakuStyleConfig>({
+    mode: 1,
+    fontSize: 25,
+    color: '#FFFFFF',
+    opacity: 0.9,
+  })
+  const [onlineCount, setOnlineCount] = useState(1)
+  const [danmakuItems, setDanmakuItems] = useState<DanmakuItem[]>([])
+  const [liveQueue, setLiveQueue] = useState<DanmakuItem[]>([])
+  const [danmakuSending, setDanmakuSending] = useState(false)
+  const [danmakuError, setDanmakuError] = useState('')
+
+  const loadedSegmentsRef = useRef<Set<number>>(new Set())
+  const segmentDurationRef = useRef<number>(DANMAKU_SEGMENT_MS)
+  const activePartIdRef = useRef<string>('')
 
   const loadDetail = useCallback(async () => {
     if (!bvid) {
@@ -97,6 +144,187 @@ export function VideoPage() {
     }
     return video.parts.find((item) => item.part_index === requestedPartIndex) ?? video.parts[0]
   }, [video, requestedPartIndex])
+
+  useEffect(() => {
+    activePartIdRef.current = activePart?.id ?? ''
+  }, [activePart?.id])
+
+  const loadSegment = useCallback(
+    async (targetBvid: string, partId: string, segment: number) => {
+      if (loadedSegmentsRef.current.has(segment)) {
+        return
+      }
+      loadedSegmentsRef.current.add(segment)
+      try {
+        const res = await danmakuApi.listSegment(targetBvid, partId, segment)
+        if (activePartIdRef.current !== partId) {
+          return
+        }
+        if (res.segment_duration_ms > 0) {
+          segmentDurationRef.current = res.segment_duration_ms
+        }
+        if (res.online_count > 0) {
+          setOnlineCount(res.online_count)
+        }
+        if (res.items.length > 0) {
+          setDanmakuItems((prev) => mergeDanmakuItems(prev, res.items))
+        }
+      } catch {
+        loadedSegmentsRef.current.delete(segment)
+      }
+    },
+    [],
+  )
+
+  // 切换视频或分 P 时清空弹幕池并拉取第 0 段历史弹幕
+  useEffect(() => {
+    loadedSegmentsRef.current.clear()
+    setDanmakuItems([])
+    setLiveQueue([])
+    setDanmakuError('')
+    if (!video || video.status !== 3 || !activePart) {
+      return
+    }
+    void loadSegment(video.bv_id, activePart.id, 0)
+  }, [video?.bv_id, video?.status, activePart?.id, loadSegment])
+
+  // 播放进度推进或拖动进度条时按需拉取当前分段并预拉取下一分段
+  useEffect(() => {
+    if (!video || video.status !== 3 || !activePart) {
+      return
+    }
+    const segMs = segmentDurationRef.current || DANMAKU_SEGMENT_MS
+    const currentSegment = Math.floor(Math.max(0, playerTimeMs) / segMs)
+    void loadSegment(video.bv_id, activePart.id, currentSegment)
+
+    const remainInSegment = (currentSegment + 1) * segMs - playerTimeMs
+    const totalMs = (activePart.duration_sec || 0) * 1000
+    if (remainInSegment <= 20000 && (currentSegment + 1) * segMs < totalMs) {
+      void loadSegment(video.bv_id, activePart.id, currentSegment + 1)
+    }
+  }, [video?.bv_id, video?.status, activePart?.id, activePart?.duration_sec, playerTimeMs, loadSegment])
+
+  // 建立视频房间 WebSocket 长连接（含心跳与断线重连）
+  useEffect(() => {
+    if (!video || video.status !== 3) {
+      return
+    }
+    let closedByEffect = false
+    let socket: WebSocket | null = null
+    let pingTimer: number | null = null
+    let reconnectTimer: number | null = null
+    let attempt = 0
+
+    const clearTimers = () => {
+      if (pingTimer !== null) {
+        window.clearInterval(pingTimer)
+        pingTimer = null
+      }
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+    }
+
+    const connect = () => {
+      if (closedByEffect) {
+        return
+      }
+      const token = tokenStorage.getAccessToken()
+      const protocols = token ? ['bilibili', `bearer.${token}`] : undefined
+      const ws = protocols
+        ? new WebSocket(buildVideoRoomWsUrl(video.bv_id), protocols)
+        : new WebSocket(buildVideoRoomWsUrl(video.bv_id))
+      socket = ws
+
+      ws.onopen = () => {
+        attempt = 0
+        pingTimer = window.setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }))
+          }
+        }, 25000)
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data)) as VideoRoomWsMessage
+          if (payload.type === 'online_count') {
+            setOnlineCount(Math.max(1, Number(payload.data.count || 1)))
+          } else if (payload.type === 'danmaku' && payload.data) {
+            const incoming = payload.data
+            if (incoming.part_id === activePartIdRef.current) {
+              setDanmakuItems((prev) => mergeDanmakuItems(prev, [incoming]))
+              setLiveQueue((prev) => [...prev, incoming])
+            }
+          }
+        } catch {
+          // 忽略无法解析的帧
+        }
+      }
+
+      ws.onclose = () => {
+        clearTimers()
+        if (!closedByEffect) {
+          attempt += 1
+          const delayMs = Math.min(10000, 1000 * attempt)
+          reconnectTimer = window.setTimeout(connect, delayMs)
+        }
+      }
+    }
+
+    connect()
+
+    return () => {
+      closedByEffect = true
+      clearTimers()
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+        socket.close()
+      }
+    }
+  }, [video?.bv_id, video?.status, user?.id])
+
+  const handleConsumeLive = useCallback(() => {
+    setLiveQueue([])
+  }, [])
+
+  const handleSendDanmaku = async (content: string): Promise<boolean> => {
+    if (!video || !activePart) {
+      return false
+    }
+    setDanmakuError('')
+    setDanmakuSending(true)
+    try {
+      const created = await danmakuApi.send(video.bv_id, {
+        part_id: activePart.id,
+        content,
+        time_offset_ms: Math.max(0, Math.round(playerTimeMs)),
+        mode: danmakuStyle.mode,
+        font_size: danmakuStyle.fontSize,
+        color: danmakuStyle.color,
+      })
+      const selfItem: DanmakuItem = { ...created, isSelf: true }
+      setDanmakuItems((prev) => mergeDanmakuItems(prev, [selfItem]))
+      setLiveQueue((prev) => [...prev, selfItem])
+      setVideo((prev) =>
+        prev
+          ? {
+              ...prev,
+              stat: {
+                ...prev.stat,
+                danmaku_count: (prev.stat?.danmaku_count ?? 0) + 1,
+              },
+            }
+          : prev,
+      )
+      return true
+    } catch (err) {
+      setDanmakuError(err instanceof ApiError ? err.message : '发送弹幕失败，请稍后重试')
+      return false
+    } finally {
+      setDanmakuSending(false)
+    }
+  }
 
   const isAuthor = Boolean(user && video && user.id === video.author.id)
 
@@ -169,6 +397,42 @@ export function VideoPage() {
                 canRetry={isAuthor}
                 retrying={retrying}
                 onRetryTranscode={() => void handleRetryTranscode()}
+                onTimeChange={setPlayerTimeMs}
+                onPlayStateChange={setPlayerPlaying}
+                onRateChange={setPlayerRate}
+                overlay={
+                  activePart && video.status === 3 ? (
+                    <DanmakuLayer
+                      partId={activePart.id}
+                      items={danmakuItems}
+                      liveQueue={liveQueue}
+                      onConsumeLive={handleConsumeLive}
+                      currentTimeMs={playerTimeMs}
+                      playing={playerPlaying}
+                      playbackRate={playerRate}
+                      enabled={danmakuEnabled}
+                      opacity={danmakuStyle.opacity}
+                    />
+                  ) : null
+                }
+                footer={
+                  video.status === 3 && activePart ? (
+                    <DanmakuBar
+                      onlineCount={onlineCount}
+                      loadedCount={danmakuItems.length}
+                      enabled={danmakuEnabled}
+                      onToggleEnabled={() => setDanmakuEnabled((prev) => !prev)}
+                      styleConfig={danmakuStyle}
+                      onChangeStyle={setDanmakuStyle}
+                      isLoggedIn={Boolean(user)}
+                      disabled={activePart.transcode_status !== 2}
+                      sending={danmakuSending}
+                      errorMsg={danmakuError}
+                      onRequireLogin={() => openAuthModal('login')}
+                      onSend={handleSendDanmaku}
+                    />
+                  ) : null
+                }
               />
 
               <div className="video-page__toolbar">

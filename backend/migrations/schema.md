@@ -191,6 +191,21 @@
 | `idx_video_stat_danmaku` | 索引 | `danmaku_count DESC`、`video_id DESC` | 支持按弹幕数排序。 |
 | `idx_video_stat_hot` | 索引 | `hot_score DESC`、`video_id DESC` | 支持按热度分值排序。 |
 
+### `video_stat_event` 视频统计增量事件处理记录表
+
+保存已应用的统计增量 ID，确保重复投递只更新一次计数。
+
+| 字段 | 类型 | 默认值 | 可为空 | 业务说明 | 逻辑外键 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | 无 | 否 | 已处理的统计增量事件 ID | — |
+| `video_id` | `BIGINT` | 无 | 否 | 关联的视频 ID | `video.id` |
+| `applied_at` | `DATETIME` | `CURRENT_TIMESTAMP` | 否 | 增量写入统计的时间 | — |
+
+| 索引名称 | 类型 | 字段及顺序 | 用途 |
+| --- | --- | --- | --- |
+| `PRIMARY` | 主键 | `id` | 按事件 ID 去重。 |
+| `idx_video_stat_event_video` | 普通索引 | `video_id` | 按视频查询已应用事件。 |
+
 ### `tag` 视频标签表
 
 保存供视频关联和推荐使用的标签名称。
@@ -250,6 +265,22 @@
 - 异步写入重试沿用同一条弹幕的 `id`。
 
 ## comment 模块
+
+### `danmaku_stat_outbox` 弹幕统计待投递记录表
+
+与弹幕入库在同一事务内记录本批实际增量，投递成功后删除待发记录。
+
+| 字段 | 类型 | 默认值 | 可为空 | 业务说明 | 逻辑外键 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | 无 | 否 | 弹幕统计增量事件 ID | — |
+| `video_id` | `BIGINT` | 无 | 否 | 关联的视频 ID | `video.id` |
+| `danmaku_delta` | `BIGINT` | 无 | 否 | 本批实际新增的弹幕条数 | — |
+| `created_at` | `DATETIME` | `CURRENT_TIMESTAMP` | 否 | 待投递记录的创建时间 | — |
+
+| 索引名称 | 类型 | 字段及顺序 | 用途 |
+| --- | --- | --- | --- |
+| `PRIMARY` | 主键 | `id` | 确定投递顺序并定位待发记录。 |
+| `idx_danmaku_stat_outbox_video` | 普通索引 | `video_id` | 按视频查询待投递增量。 |
 
 ### `comment` 视频评论与回复表
 

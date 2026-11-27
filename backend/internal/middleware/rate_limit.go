@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,12 +27,22 @@ return 1
 `)
 
 func RateLimit(client *redis.Client, logger *slog.Logger, scope string, limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimit(client, logger, limit, window, func(c *gin.Context) string { return "rate:auth:" + scope + ":" + c.ClientIP() })
+}
+
+func RateLimitByUser(client *redis.Client, logger *slog.Logger, scope string, limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimit(client, logger, limit, window, func(c *gin.Context) string {
+		return "rate:user:" + scope + ":" + strconv.FormatInt(c.GetInt64(UserIDKey), 10)
+	})
+}
+
+func rateLimit(client *redis.Client, logger *slog.Logger, limit int, window time.Duration, keyFor func(*gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		key := "rate:auth:" + scope + ":" + c.ClientIP()
+		key := keyFor(c)
 		allowed, err := slidingWindow.Run(ctx, client, []string{key}, window.Milliseconds(), limit, rand.Text()).Int()
 		if err != nil {
-			logger.ErrorContext(ctx, "检查认证请求限流", "error", err)
+			logger.ErrorContext(ctx, "检查请求限流", "error", err)
 			response.Fail(c, errcode.InternalError, "")
 			return
 		}

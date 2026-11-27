@@ -28,7 +28,7 @@ flowchart LR
     Bootstrap["internal/bootstrap (按单向顺序装配模块)"]
     LowerSvc["允许调用的下层模块 Service"]
     MQ["internal/mq (RocketMQ 事件总线)"]
-    Infra["internal/infra (MySQL / Redis / MinIO / FFmpeg / 敏感词)"]
+    Infra["internal/infra (MySQL / Redis / MinIO / FFmpeg / 日志 / 指标)"]
 
     Client --> MW
     Client --> WS
@@ -83,7 +83,7 @@ flowchart LR
 | `internal/middleware/` | Gin 全局与路由级中间件（TraceID、结构化日志、异常恢复、CORS、JWT 鉴权、Redis Lua 限流、Prometheus 指标） |
 | `internal/ws/` | WebSocket 连接中心、视频弹幕房间连接表、在线人数统计与站内未读通知推送 |
 | `internal/mq/` | RocketMQ Topic、Consumer Group 与 Tag 常量、公共消息体定义与生产者封装 |
-| `internal/infra/` | 第三方中间件与外部工具客户端封装（`mysql` 含启动自动迁移、`redis`、`minio` 含自动建桶与预签名分片、`rocketmq` 含通用 `Producer` 与推/拉 `PushConsumer`/`PullConsumer` 及任意时间点延迟、`ffmpeg`、`sensitive`、`logger`、`metrics`） |
+| `internal/infra/` | 第三方中间件与外部工具客户端封装（`mysql` 含启动自动迁移、`redis`、`minio` 含自动建桶与预签名分片、`rocketmq` 含通用 `Producer` 与推/拉 `PushConsumer`/`PullConsumer` 及任意时间点延迟、`ffmpeg`、`logger`、`metrics`） |
 | `internal/pkg/` | 无业务耦合的通用基础包（`errcode`、`response`、`jwt`、`password`、`snowflake`、`pagination`、`tx`） |
 | `internal/modules/` | 8 个按业务领域划分的独立业务模块 |
 
@@ -94,7 +94,7 @@ flowchart LR
 | `internal/modules/user/` | 注册登录、双 Token 续期与注销、个人资料与头像、用户基础信息批量查询、代币余额乐观锁扣减 | `user` | 无 | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
 | `internal/modules/upload/` | 图片预签名直传、文件哈希秒传、MinIO 分片预签名直传、断点续传与分片合并、已完成上传任务校验 | `upload_task` | 无 | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
 | `internal/modules/video/` | 稿件发布与编辑、分 P 关联上传任务、消费 FFmpeg 多清晰度 HLS 转码任务、分区与标签、视频详情缓存、播放与互动计数缓冲回写、`LIKE` 基础搜索、查看某 UP 主投稿列表 | `category`、`home_banner`、`video`、`video_part`、`video_stat`、`tag`、`video_tag` | `user`、`upload` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
-| `internal/modules/danmaku/` | 历史弹幕按时间分段缓存拉取、发送弹幕敏感词过滤与限流、弹幕异步持久化与 WebSocket 房间广播 | `danmaku` | `video` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
+| `internal/modules/danmaku/` | 历史弹幕按时间分段缓存拉取、发送弹幕用户级限流、弹幕拉模式批量持久化、弹幕计数异步同步与 WebSocket 房间广播 | `danmaku` | `video` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
 | `internal/modules/comment/` | 两级楼中楼发表与回复、最热/最新游标分页、热点评论缓存、点赞/点踩、UP 主置顶与点赞标记 | `comment` | `video`、`user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`model.go`、`dto.go` |
 | `internal/modules/interaction/` | 点赞、投币事务与 RocketMQ 事务消息、一键三连编排、多收藏夹管理、观看历史缓冲与批量回写 | `video_interaction`、`favorite_folder`、`favorite_item`、`watch_history` | `video`、`user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |
 | `internal/modules/social/` | 关注与互关判定、粉丝列表、视频与图文动态、混合模式动态流（普通写扩散/大 V 读扩散）、站内通知与未读推送 | `user_follow`、`dynamic_post`、`notification` | `video`、`user` | `routes.go`、`handler.go`、`service.go`、`store.go`、`consumer.go`、`model.go`、`dto.go` |

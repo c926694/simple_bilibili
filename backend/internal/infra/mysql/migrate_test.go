@@ -44,10 +44,10 @@ func TestMigrateIntegration(t *testing.T) {
 		t.Fatal("迁移测试要求初始数据库为空")
 	}
 	tables := []string{
-		"category", "coin_ledger", "comment", "comment_reaction", "danmaku", "dynamic_inbox", "dynamic_post",
+		"category", "coin_ledger", "comment", "comment_reaction", "danmaku", "danmaku_stat_outbox", "dynamic_inbox", "dynamic_post",
 		"favorite_folder", "favorite_item", "home_banner", "notification", "schema_migrations", "tag", "upload_task",
 		"user", "user_follow", "user_video_behavior", "video", "video_interaction", "video_part", "video_stat",
-		"video_tag", "watch_history",
+		"video_stat_event", "video_tag", "watch_history",
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -83,8 +83,8 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &comments, "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"); err != nil {
 		t.Fatal(err)
 	}
-	if len(comments) != 179 {
-		t.Fatalf("迁移生成了 %d 个字段，期望 179 个", len(comments))
+	if len(comments) != 186 {
+		t.Fatalf("迁移生成了 %d 个字段，期望 186 个", len(comments))
 	}
 	for _, comment := range comments {
 		if !strings.ContainsFunc(comment, func(r rune) bool { return unicode.Is(unicode.Han, r) }) {
@@ -96,7 +96,7 @@ func TestMigrateIntegration(t *testing.T) {
 	if err := db.SelectContext(t.Context(), &applied, "SELECT version FROM schema_migrations"); err != nil {
 		t.Fatal(err)
 	}
-	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql"}
+	versions := []string{"0001_init_schema.up.sql", "0002_seed_categories.up.sql", "0003_video_transcode_dispatch.up.sql", "0004_danmaku_stat_delivery.up.sql"}
 	if !slices.Equal(applied, versions) {
 		t.Fatalf("迁移版本为 %v", applied)
 	}

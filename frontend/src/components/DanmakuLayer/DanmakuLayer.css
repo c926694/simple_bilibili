@@ -1,0 +1,65 @@
+.danmaku-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.danmaku-item {
+  position: absolute;
+  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1.2;
+  text-shadow:
+    1px 0 2px rgba(0, 0, 0, 0.85),
+    -1px 0 2px rgba(0, 0, 0, 0.85),
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 -1px 2px rgba(0, 0, 0, 0.85);
+  will-change: transform, opacity;
+  user-select: none;
+}
+
+.danmaku-item--self {
+  padding: 1px 8px;
+  border-radius: 4px;
+  border: 1.5px solid #00aeec;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.danmaku-item--scroll {
+  left: 100%;
+  animation-name: danmaku-scroll-left;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.danmaku-item--top,
+.danmaku-item--bottom {
+  left: 50%;
+  transform: translateX(-50%);
+  animation-name: danmaku-fixed-stay;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes danmaku-scroll-left {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(-100% - 1100px), 0, 0);
+  }
+}
+
+@keyframes danmaku-fixed-stay {
+  0% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

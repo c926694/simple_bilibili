@@ -1,5 +1,5 @@
 import Hls from 'hls.js'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { VideoPart } from '../../types/video'
 import { formatDuration } from '../../utils/format'
 import './HlsPlayer.css'
@@ -18,6 +18,11 @@ interface HlsPlayerProps {
   canRetry?: boolean
   retrying?: boolean
   onRetryTranscode?: () => void
+  onTimeChange?: (timeMs: number) => void
+  onPlayStateChange?: (playing: boolean) => void
+  onRateChange?: (rate: number) => void
+  overlay?: ReactNode
+  footer?: ReactNode
 }
 
 export function HlsPlayer({
@@ -26,6 +31,11 @@ export function HlsPlayer({
   canRetry = false,
   retrying = false,
   onRetryTranscode,
+  onTimeChange,
+  onPlayStateChange,
+  onRateChange,
+  overlay,
+  footer,
 }: HlsPlayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -72,9 +82,11 @@ export function HlsPlayer({
     setCurrentTime(0)
     setDuration(part?.duration_sec ?? 0)
     setPlaying(false)
+    onTimeChange?.(0)
+    onPlayStateChange?.(false)
     setPlayerError('')
     pendingResumeRef.current = null
-  }, [part?.id, part?.duration_sec, qualities])
+  }, [part?.id, part?.duration_sec, qualities, onTimeChange, onPlayStateChange])
 
   // 加载当前清晰度的 HLS 流
   useEffect(() => {
@@ -173,6 +185,7 @@ export function HlsPlayer({
     }
     videoEl.currentTime = value
     setCurrentTime(value)
+    onTimeChange?.(Math.round(value * 1000))
   }
 
   const handleVolumeChange = (nextVolume: number) => {
@@ -197,6 +210,7 @@ export function HlsPlayer({
 
   const handleSpeedChange = (rate: number) => {
     setPlaybackRate(rate)
+    onRateChange?.(rate)
     if (videoRef.current) {
       videoRef.current.playbackRate = rate
     }
@@ -267,132 +281,150 @@ export function HlsPlayer({
   const maxDuration = duration > 0 ? duration : part.duration_sec || 1
 
   return (
-    <div ref={containerRef} className="hls-player">
-      <div className="hls-player__stage" onClick={handleTogglePlay}>
-        <video
-          ref={videoRef}
-          className="hls-player__video"
-          poster={poster || undefined}
-          playsInline
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => {
-            if (Number.isFinite(e.currentTarget.duration)) {
-              setDuration(e.currentTarget.duration)
-            }
-          }}
-        />
-        {!playing && !playerError && (
-          <button
-            type="button"
-            className="hls-player__center-play"
-            aria-label="播放视频"
-            onClick={(e) => {
-              e.stopPropagation()
-              handleTogglePlay()
+    <div ref={containerRef} className="hls-player-shell">
+      <div className="hls-player">
+        <div className="hls-player__stage" onClick={handleTogglePlay}>
+          <video
+            ref={videoRef}
+            className="hls-player__video"
+            poster={poster || undefined}
+            playsInline
+            onPlay={() => {
+              setPlaying(true)
+              onPlayStateChange?.(true)
             }}
-          >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M8 5.5v13l11-6.5-11-6.5z" />
-            </svg>
-          </button>
-        )}
-        {playerError && <div className="hls-player__error">{playerError}</div>}
-      </div>
-
-      <div className="hls-player__controls">
-        <div className="hls-player__progress-row">
-          <input
-            type="range"
-            className="hls-player__seek"
-            min={0}
-            max={maxDuration}
-            step={0.1}
-            value={Math.min(currentTime, maxDuration)}
-            onChange={(e) => handleSeek(Number(e.target.value))}
-            aria-label="播放进度"
+            onPause={() => {
+              setPlaying(false)
+              onPlayStateChange?.(false)
+            }}
+            onEnded={() => {
+              setPlaying(false)
+              onPlayStateChange?.(false)
+            }}
+            onTimeUpdate={(e) => {
+              const sec = e.currentTarget.currentTime
+              setCurrentTime(sec)
+              onTimeChange?.(Math.round(sec * 1000))
+            }}
+            onLoadedMetadata={(e) => {
+              if (Number.isFinite(e.currentTarget.duration)) {
+                setDuration(e.currentTarget.duration)
+              }
+            }}
           />
+          {overlay}
+          {!playing && !playerError && (
+            <button
+              type="button"
+              className="hls-player__center-play"
+              aria-label="播放视频"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleTogglePlay()
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5.5v13l11-6.5-11-6.5z" />
+              </svg>
+            </button>
+          )}
+          {playerError && <div className="hls-player__error">{playerError}</div>}
         </div>
 
-        <div className="hls-player__bar">
-          <div className="hls-player__bar-left">
-            <button
-              type="button"
-              className="hls-player__ctrl-btn"
-              onClick={handleTogglePlay}
-              aria-label={playing ? '暂停' : '播放'}
-            >
-              {playing ? '暂停' : '播放'}
-            </button>
-            <span className="hls-player__time">
-              {formatDuration(currentTime)} / {formatDuration(maxDuration)}
-            </span>
-          </div>
-
-          <div className="hls-player__bar-right">
-            <label className="hls-player__select-wrap">
-              <span className="hls-player__sr-only">清晰度</span>
-              <select
-                className="hls-player__select"
-                value={activeQuality.key}
-                onChange={(e) => handleQualityChange(e.target.value as QualityOption['key'])}
-                aria-label="切换清晰度"
-              >
-                {qualities.map((q) => (
-                  <option key={q.key} value={q.key}>
-                    {q.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="hls-player__select-wrap">
-              <span className="hls-player__sr-only">倍速</span>
-              <select
-                className="hls-player__select"
-                value={playbackRate}
-                onChange={(e) => handleSpeedChange(Number(e.target.value))}
-                aria-label="切换倍速"
-              >
-                {SPEED_OPTIONS.map((rate) => (
-                  <option key={rate} value={rate}>
-                    {rate === 1 ? '倍速 1.0x' : `${rate}x`}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              className="hls-player__ctrl-btn"
-              onClick={handleToggleMute}
-              aria-label={muted ? '取消静音' : '静音'}
-            >
-              {muted || volume === 0 ? '静音' : '音量'}
-            </button>
+        <div className="hls-player__controls">
+          <div className="hls-player__progress-row">
             <input
               type="range"
-              className="hls-player__volume"
+              className="hls-player__seek"
               min={0}
-              max={1}
-              step={0.05}
-              value={muted ? 0 : volume}
-              onChange={(e) => handleVolumeChange(Number(e.target.value))}
-              aria-label="音量滑块"
+              max={maxDuration}
+              step={0.1}
+              value={Math.min(currentTime, maxDuration)}
+              onChange={(e) => handleSeek(Number(e.target.value))}
+              aria-label="播放进度"
             />
+          </div>
 
-            <button
-              type="button"
-              className="hls-player__ctrl-btn"
-              onClick={() => void handleToggleFullscreen()}
-              aria-label={isFullscreen ? '退出全屏' : '全屏'}
-            >
-              {isFullscreen ? '退出全屏' : '全屏'}
-            </button>
+          <div className="hls-player__bar">
+            <div className="hls-player__bar-left">
+              <button
+                type="button"
+                className="hls-player__ctrl-btn"
+                onClick={handleTogglePlay}
+                aria-label={playing ? '暂停' : '播放'}
+              >
+                {playing ? '暂停' : '播放'}
+              </button>
+              <span className="hls-player__time">
+                {formatDuration(currentTime)} / {formatDuration(maxDuration)}
+              </span>
+            </div>
+
+            <div className="hls-player__bar-right">
+              <label className="hls-player__select-wrap">
+                <span className="hls-player__sr-only">清晰度</span>
+                <select
+                  className="hls-player__select"
+                  value={activeQuality.key}
+                  onChange={(e) => handleQualityChange(e.target.value as QualityOption['key'])}
+                  aria-label="切换清晰度"
+                >
+                  {qualities.map((q) => (
+                    <option key={q.key} value={q.key}>
+                      {q.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="hls-player__select-wrap">
+                <span className="hls-player__sr-only">倍速</span>
+                <select
+                  className="hls-player__select"
+                  value={playbackRate}
+                  onChange={(e) => handleSpeedChange(Number(e.target.value))}
+                  aria-label="切换倍速"
+                >
+                  {SPEED_OPTIONS.map((rate) => (
+                    <option key={rate} value={rate}>
+                      {rate === 1 ? '倍速 1.0x' : `${rate}x`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                className="hls-player__ctrl-btn"
+                onClick={handleToggleMute}
+                aria-label={muted ? '取消静音' : '静音'}
+              >
+                {muted || volume === 0 ? '静音' : '音量'}
+              </button>
+              <input
+                type="range"
+                className="hls-player__volume"
+                min={0}
+                max={1}
+                step={0.05}
+                value={muted ? 0 : volume}
+                onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                aria-label="音量滑块"
+              />
+
+              <button
+                type="button"
+                className="hls-player__ctrl-btn"
+                onClick={() => void handleToggleFullscreen()}
+                aria-label={isFullscreen ? '退出全屏' : '全屏'}
+              >
+                {isFullscreen ? '退出全屏' : '全屏'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+      {footer}
     </div>
   )
 }
